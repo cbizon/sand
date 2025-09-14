@@ -126,6 +126,43 @@ class TestCalculateBallWallCollisionTime:
         expected_time = (-1 + np.sqrt(1 + 5.2))
         assert collision_time == pytest.approx(expected_time)
     
+    def test_ball_hitting_ceiling_upward_motion(self):
+        """Test ball moving upward hitting ceiling (top wall)."""
+        # Ball below ceiling, moving upward, should hit ceiling
+        ball = Ball(np.array([2.0, 3.0]), np.array([0.0, 2.0]), 0.3, 0, (2, 3), time=0.0)
+        wall = Wall(1, 5.0, restitution=1.0)  # ceiling at y=5.0
+        
+        collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=True)
+        
+        # Ball at y=3.0, moving up with velocity +2.0, ceiling at y=5.0, radius=0.3
+        # Ball center must reach y = 5.0 - 0.3 = 4.7 to touch ceiling
+        # Equation: 3.0 + 2.0*t - 0.5*t^2 = 4.7
+        # Rearrange: 0.5*t^2 - 2.0*t + (4.7 - 3.0) = 0
+        # 0.5*t^2 - 2.0*t + 1.7 = 0
+        # t = (2 ± sqrt(4 - 3.4))/1 = (2 ± sqrt(0.6))/1
+        # Take smaller positive solution: t = 2 - sqrt(0.6)
+        expected_time = 2 - np.sqrt(0.6)
+        assert collision_time == pytest.approx(expected_time)
+    
+    def test_ball_missing_ceiling_due_to_gravity(self):
+        """Test ball that would hit ceiling but gravity makes it fall back down."""
+        # Ball below ceiling, weak upward velocity, gravity pulls it back down before hitting
+        ball = Ball(np.array([2.0, 3.0]), np.array([0.0, 0.5]), 0.3, 0, (2, 3), time=0.0)
+        wall = Wall(1, 5.0, restitution=1.0)  # ceiling at y=5.0
+        
+        collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=True)
+        
+        # Ball at y=3.0, moving up with weak velocity +0.5, ceiling at y=5.0, radius=0.3
+        # Ball center must reach y = 5.0 - 0.3 = 4.7 to touch ceiling
+        # Equation: 3.0 + 0.5*t - 0.5*t^2 = 4.7
+        # 0.5*t^2 - 0.5*t + (3.0 - 4.7) = 0
+        # 0.5*t^2 - 0.5*t - 1.7 = 0
+        # t^2 - t - 3.4 = 0
+        # Discriminant = 1 + 13.6 = 14.6 > 0, so there should be solutions
+        # But let's check: max height = 3.0 + (0.5^2)/(2*0.5) = 3.0 + 0.25 = 3.25
+        # Since 3.25 < 4.7, ball never reaches ceiling
+        assert collision_time is None
+    
     def test_vertical_wall_with_gravity(self):
         """Test ball hitting vertical wall with gravity (gravity doesn't affect x-motion)."""
         ball = Ball(np.array([1.0, 3.0]), np.array([1.5, 0.0]), 0.2, 0, (1, 3), time=0.0)
