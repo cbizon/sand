@@ -12,6 +12,30 @@ This is an implementation of a molecular dynamics simulation of granular media.
 
 ## Key Dependencies
 
+## Coordinate System
+
+We use a right-handed coordinate system with the following conventions:
+
+**2D System:**
+- **x-axis**: Horizontal, positive direction points RIGHT
+- **y-axis**: Vertical, positive direction points UP
+- **Origin (0,0)**: Bottom-left corner of simulation domain
+
+**3D System:**
+- **x-axis**: Horizontal, positive direction points RIGHT  
+- **y-axis**: Vertical, positive direction points UP
+- **z-axis**: Depth, positive direction points OUT toward viewer (right-handed rule)
+- **Origin (0,0,0)**: Bottom-left-front corner of simulation domain
+
+**Gravity:**
+- When enabled, gravity acts in the **negative y-direction** (downward)
+- Magnitude g=1 in scaled time units
+
+**Simulation Domain:**
+- Rectangular box with walls inset by 0.01 from domain boundaries
+- Domain spans from (0,0) to (width, height) in 2D
+- Domain spans from (0,0,0) to (width, height, depth) in 3D
+
 ## Basic Workflow
 
 We will construct a simulation of circular grains interacting via collision. This will be an event-driven simulation.  In an event driven simulation, we don't have a "time step".  Instead we calculate when events will occur, and advance to that point.
