@@ -118,11 +118,11 @@ class TestCalculateBallWallCollisionTime:
         collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=True)
         
         # Ball at y=5.0, moving down with initial velocity -1.0, with gravity
-        # Collision occurs when ball surface (center - radius) touches wall at y=2.0
-        # So collision at y = 2.0 + 0.4 = 2.4 (ball center position)
-        # Equation: 5.0 - 1.0*t - 0.5*t^2 = 2.4
-        # 0.5*t^2 + t - 2.6 = 0
-        # t = (-1 + sqrt(1 + 5.2)) / 1
+        # Collision occurs when ball surface touches wall at y=2.0
+        # Since ball is above wall, collision_coord = wall.coordinate + ball.radius = 2.0 + 0.4 = 2.4
+        # Equation: 5.0 + (-1.0)*t - 0.5*t^2 = 2.4
+        # Rearranging: 0.5*t^2 + t - 2.6 = 0
+        # Using quadratic formula: t = (-1 + sqrt(1 + 5.2)) / 1
         expected_time = (-1 + np.sqrt(1 + 5.2))
         assert collision_time == pytest.approx(expected_time)
     
@@ -280,7 +280,7 @@ class TestPerformBallWallCollision:
     def test_ball_hitting_vertical_wall(self):
         """Test ball hitting vertical wall."""
         ball = Ball(np.array([4.7, 2.5]), np.array([2.0, 1.0]), 0.3, 0, (4, 2), time=1.0)
-        wall = Wall(0, 5.0, ((2.0, 3.0),), restitution=1.0)  # x-normal wall at x=5.0
+        wall = Wall(0, 5.0, restitution=1.0)  # x-normal wall at x=5.0
         
         perform_ball_wall_collision(ball, wall, 1.0)
         
@@ -290,7 +290,7 @@ class TestPerformBallWallCollision:
     def test_ball_hitting_horizontal_wall(self):
         """Test ball hitting horizontal wall."""
         ball = Ball(np.array([2.5, 2.4]), np.array([1.0, -3.0]), 0.4, 0, (2, 2), time=1.0)
-        wall = Wall(1, 2.0, ((2.0, 3.0),), restitution=1.0)  # y-normal wall at y=2.0
+        wall = Wall(1, 2.0, restitution=1.0)  # y-normal wall at y=2.0
         
         # Ball at y=2.4, wall at y=2.0, so ball is above wall
         # Ball moving down toward wall (velocity y=-3.0)
@@ -304,7 +304,7 @@ class TestPerformBallWallCollision:
     def test_inelastic_wall_collision(self):
         """Test inelastic collision with wall."""
         ball = Ball(np.array([4.8, 2.5]), np.array([2.0, 1.0]), 0.2, 0, (4, 2), time=1.0)
-        wall = Wall(0, 5.0, ((2.0, 3.0),), restitution=0.6)  # x-normal wall at x=5.0
+        wall = Wall(0, 5.0, restitution=0.6)  # x-normal wall at x=5.0
         
         perform_ball_wall_collision(ball, wall, 0.6)
         
@@ -314,7 +314,7 @@ class TestPerformBallWallCollision:
     def test_ball_moving_away_from_wall(self):
         """Test ball moving away from wall - no collision."""
         ball = Ball(np.array([5.2, 2.5]), np.array([1.0, 1.0]), 0.2, 0, (5, 2), time=1.0)
-        wall = Wall(0, 5.0, ((2.0, 3.0),), restitution=1.0)  # x-normal wall at x=5.0
+        wall = Wall(0, 5.0, restitution=1.0)  # x-normal wall at x=5.0
         
         original_velocity = ball.velocity.copy()
         

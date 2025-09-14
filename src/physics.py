@@ -114,10 +114,10 @@ def calculate_ball_wall_collision_time(ball: 'Ball', wall: 'Wall',
         # Y-direction with gravity - solve quadratic
         
         # Solve: pos_y + vel_y*t - 0.5*t^2 = collision_coord
-        # Rearrange: 0.5*t^2 - vel_y*t + (pos_y - collision_coord) = 0
+        # Rearrange: 0.5*t^2 + (-vel_y)*t + (collision_coord - pos_y) = 0
         a = 0.5
-        b = -vel[1]
-        c = pos[1] - collision_coord
+        b = -vel[1]  # -vel[1] = -(-1.0) = +1.0 for downward motion
+        c = collision_coord - pos[1]  # 2.4 - 5.0 = -2.6
         
         # Check discriminant before sqrt
         discriminant = b*b - 4*a*c
