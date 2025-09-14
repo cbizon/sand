@@ -146,11 +146,6 @@ def calculate_ball_wall_collision_time(ball: 'Ball', wall: 'Wall',
     if collision_time is None:
         return None
     
-    # Only do expensive bounds check if we have a valid collision time
-    collision_pos = ball.get_position_at_time(current_time + collision_time, ndim, gravity)
-    if not wall.is_point_in_bounds(collision_pos):
-        return None
-    
     return current_time + collision_time
 
 

@@ -80,7 +80,7 @@ class TestCalculateBallWallCollisionTime:
     def test_ball_approaching_vertical_wall(self):
         """Test ball approaching a vertical wall."""
         ball = Ball(np.array([1.0, 2.0]), np.array([2.0, 0.0]), 0.3, 0, (1, 2), time=0.0)
-        wall = Wall(0, 5.0, ((1.0, 3.0),), restitution=1.0)  # x-normal wall at x=5.0
+        wall = Wall(0, 5.0, restitution=1.0)  # x-normal wall at x=5.0
         
         collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=False)
         
@@ -92,7 +92,7 @@ class TestCalculateBallWallCollisionTime:
     def test_ball_moving_away_from_wall(self):
         """Test ball moving away from wall."""
         ball = Ball(np.array([6.0, 2.0]), np.array([1.0, 0.0]), 0.3, 0, (6, 2), time=0.0)
-        wall = Wall(0, 5.0, ((1.0, 3.0),), restitution=1.0)  # x-normal wall at x=5.0
+        wall = Wall(0, 5.0, restitution=1.0)  # x-normal wall at x=5.0
         
         collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=False)
         
@@ -102,27 +102,18 @@ class TestCalculateBallWallCollisionTime:
     def test_ball_parallel_to_wall(self):
         """Test ball moving parallel to wall."""
         ball = Ball(np.array([3.0, 2.0]), np.array([0.0, 1.0]), 0.3, 0, (3, 2), time=0.0)
-        wall = Wall(0, 5.0, ((1.0, 3.0),), restitution=1.0)  # x-normal wall at x=5.0
+        wall = Wall(0, 5.0, restitution=1.0)  # x-normal wall at x=5.0
         
         collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=False)
         
         # No motion toward wall - no collision
         assert collision_time is None
     
-    def test_ball_outside_wall_bounds(self):
-        """Test ball that would hit wall outside its bounds."""
-        ball = Ball(np.array([1.0, 5.0]), np.array([2.0, 0.0]), 0.3, 0, (1, 5), time=0.0)
-        wall = Wall(0, 5.0, ((1.0, 3.0),), restitution=1.0)  # x-normal wall, y-bounds (1.0, 3.0)
-        
-        collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=False)
-        
-        # Ball at y=5.0, wall bounds y=(1.0, 3.0) - outside bounds
-        assert collision_time is None
     
     def test_horizontal_wall_with_gravity(self):
         """Test ball falling onto horizontal wall with gravity."""
         ball = Ball(np.array([2.0, 5.0]), np.array([0.0, -1.0]), 0.4, 0, (2, 5), time=0.0)
-        wall = Wall(1, 2.0, ((1.0, 3.0),), restitution=1.0)  # y-normal wall at y=2.0
+        wall = Wall(1, 2.0, restitution=1.0)  # y-normal wall at y=2.0
         
         collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=True)
         
@@ -138,7 +129,7 @@ class TestCalculateBallWallCollisionTime:
     def test_vertical_wall_with_gravity(self):
         """Test ball hitting vertical wall with gravity (gravity doesn't affect x-motion)."""
         ball = Ball(np.array([1.0, 3.0]), np.array([1.5, 0.0]), 0.2, 0, (1, 3), time=0.0)
-        wall = Wall(0, 4.0, ((2.0, 4.0),), restitution=1.0)  # x-normal wall at x=4.0
+        wall = Wall(0, 4.0, restitution=1.0)  # x-normal wall at x=4.0
         
         collision_time = calculate_ball_wall_collision_time(ball, wall, 0.0, 2, gravity=True)
         
