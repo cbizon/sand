@@ -92,8 +92,13 @@ class BallBallCollision(Event):
         self.ball2.invalidate_all_events()
         
         # Generate new events for both balls (ball-ball, ball-wall, ball-grid)
-        new_events = event_generator.generate_events_for_ball(self.ball1)
-        new_events.extend(event_generator.generate_events_for_ball(self.ball2))
+        from .event_generation import generate_events_for_ball
+        balls = kwargs['balls']
+        walls = kwargs['walls']
+        grid = kwargs['grid']
+        
+        new_events = generate_events_for_ball(self.ball1, balls, walls, grid, self.time, ndim, gravity)
+        new_events.extend(generate_events_for_ball(self.ball2, balls, walls, grid, self.time, ndim, gravity))
         
         # Add new events to heap
         for event in new_events:
@@ -152,7 +157,12 @@ class BallWallCollision(Event):
         self.ball.invalidate_all_events()
         
         # Generate new events for the ball (ball-ball, ball-wall, ball-grid)
-        new_events = event_generator.generate_events_for_ball(self.ball)
+        from .event_generation import generate_events_for_ball
+        balls = kwargs['balls']
+        walls = kwargs['walls']
+        grid = kwargs['grid']
+        
+        new_events = generate_events_for_ball(self.ball, balls, walls, grid, self.time, ndim, gravity)
         
         # Add new events to heap
         for event in new_events:
@@ -206,7 +216,13 @@ class BallGridTransit(Event):
         
         # Generate new ball-ball events only for newly adjacent cells
         # (ball-wall and ball-grid events unchanged since velocity didn't change)
-        new_events = event_generator.generate_ball_ball_events_for_new_cell(self.ball, old_cell)
+        from .event_generation import generate_ball_ball_events_for_new_cell
+        balls = kwargs['balls']
+        ndim = kwargs['ndim']
+        gravity = kwargs['gravity']
+        current_time = self.time  # Use event time as current time
+        
+        new_events = generate_ball_ball_events_for_new_cell(self.ball, old_cell, balls, grid, current_time, ndim, gravity)
         
         # Add new events to heap
         for event in new_events:
