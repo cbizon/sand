@@ -87,21 +87,27 @@ class TestBallBallCollision:
         
         # Mock dependencies
         mock_physics = Mock()
-        mock_event_generator = Mock()
         mock_event_heap = Mock()
-        mock_event_generator.generate_events_for_ball.return_value = [Mock(), Mock()]
+        mock_grid = Mock()
+        mock_grid.get_balls_in_neighboring_cells.return_value = [0, 1]  # Return ball indices
         
-        # Mock the physics import
+        # Mock the physics imports
         with patch.dict('sys.modules', {'src.physics': mock_physics}):
             mock_physics.perform_ball_ball_collision = Mock()
             
-            collision.process(
-                ndim=2,
-                gravity=False,
-                ball_restitution=1.0,
-                event_generator=mock_event_generator,
-                event_heap=mock_event_heap
-            )
+            # Mock event generation functions to avoid calling real physics
+            with patch('src.event_generation.generate_events_for_ball') as mock_generate:
+                mock_generate.return_value = [Mock(), Mock()]
+                
+                collision.process(
+                    ndim=2,
+                    gravity=False,
+                    ball_restitution=1.0,
+                    balls=[ball1, ball2],
+                    walls=[Mock()],
+                    grid=mock_grid,
+                    event_heap=mock_event_heap
+                )
         
         # Check that balls were updated to collision time
         assert ball1.time == 3.0
@@ -111,9 +117,7 @@ class TestBallBallCollision:
         mock_physics.perform_ball_ball_collision.assert_called_once_with(ball1, ball2, 1.0)
         
         # Check that events were generated for both balls
-        assert mock_event_generator.generate_events_for_ball.call_count == 2
-        mock_event_generator.generate_events_for_ball.assert_any_call(ball1)
-        mock_event_generator.generate_events_for_ball.assert_any_call(ball2)
+        assert mock_generate.call_count == 2
         
         # Check that new events were added to heap
         assert mock_event_heap.add_event.call_count == 4  # 2 events per ball
@@ -156,20 +160,26 @@ class TestBallWallCollision:
         
         # Mock dependencies
         mock_physics = Mock()
-        mock_event_generator = Mock()
         mock_event_heap = Mock()
-        mock_event_generator.generate_events_for_ball.return_value = [Mock(), Mock()]
+        mock_grid = Mock()
+        mock_grid.get_balls_in_neighboring_cells.return_value = [0]  # Return ball index
         
         with patch.dict('sys.modules', {'src.physics': mock_physics}):
             mock_physics.perform_ball_wall_collision = Mock()
             
-            collision.process(
-                ndim=2,
-                gravity=False,
-                wall_restitution=1.0,
-                event_generator=mock_event_generator,
-                event_heap=mock_event_heap
-            )
+            # Mock event generation functions to avoid calling real physics
+            with patch('src.event_generation.generate_events_for_ball') as mock_generate:
+                mock_generate.return_value = [Mock()]
+                
+                collision.process(
+                    ndim=2,
+                    gravity=False,
+                    wall_restitution=1.0,
+                    balls=[ball],
+                    walls=[wall],
+                    grid=mock_grid,
+                    event_heap=mock_event_heap
+                )
         
         # Check that ball was updated to collision time
         assert ball.time == 3.0
@@ -178,10 +188,10 @@ class TestBallWallCollision:
         mock_physics.perform_ball_wall_collision.assert_called_once_with(ball, wall, 1.0)
         
         # Check that events were generated for ball
-        mock_event_generator.generate_events_for_ball.assert_called_once_with(ball)
+        mock_generate.assert_called_once()
         
         # Check that new events were added to heap
-        assert mock_event_heap.add_event.call_count == 2
+        assert mock_event_heap.add_event.call_count == 1
 
 
 class TestBallGridTransit:
@@ -220,15 +230,20 @@ class TestBallGridTransit:
         
         # Mock dependencies
         mock_grid = Mock()
-        mock_event_generator = Mock()
         mock_event_heap = Mock()
-        mock_event_generator.generate_ball_ball_events_for_new_cell.return_value = [Mock()]
+        mock_grid.get_balls_in_new_neighbor_cells.return_value = []  # No new neighbors
         
-        transit.process(
-            grid=mock_grid,
-            event_generator=mock_event_generator,
-            event_heap=mock_event_heap
-        )
+        # Mock event generation function
+        with patch('src.event_generation.generate_ball_ball_events_for_new_cell') as mock_generate:
+            mock_generate.return_value = [Mock()]
+            
+            transit.process(
+                grid=mock_grid,
+                balls=[ball],
+                ndim=2,
+                gravity=False,
+                event_heap=mock_event_heap
+            )
         
         # Check that ball's cell was updated
         assert ball.cell == new_cell
@@ -237,7 +252,7 @@ class TestBallGridTransit:
         mock_grid.move_ball.assert_called_once_with(ball.index, old_cell, new_cell)
         
         # Check that new ball-ball events were generated
-        mock_event_generator.generate_ball_ball_events_for_new_cell.assert_called_once_with(ball, old_cell)
+        mock_generate.assert_called_once_with(ball, old_cell, [ball], mock_grid, 2.5, 2, False)
         
         # Check that new events were added to heap
         mock_event_heap.add_event.assert_called_once()

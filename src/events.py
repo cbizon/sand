@@ -69,7 +69,9 @@ class BallBallCollision(Event):
             ndim: number of dimensions
             gravity: whether gravity is enabled
             ball_restitution: coefficient of restitution for balls
-            event_generator: object to generate new events
+            balls: list of all balls in simulation
+            walls: list of all walls
+            grid: the spatial grid
             event_heap: heap to add new events to
         """
         from .physics import perform_ball_ball_collision
@@ -77,7 +79,6 @@ class BallBallCollision(Event):
         ndim = kwargs['ndim']
         gravity = kwargs['gravity']
         ball_restitution = kwargs['ball_restitution']
-        event_generator = kwargs['event_generator']
         event_heap = kwargs['event_heap']
         
         # Update both balls to collision time
@@ -136,7 +137,9 @@ class BallWallCollision(Event):
             ndim: number of dimensions
             gravity: whether gravity is enabled
             wall_restitution: coefficient of restitution for walls
-            event_generator: object to generate new events
+            balls: list of all balls in simulation
+            walls: list of all walls
+            grid: the spatial grid
             event_heap: heap to add new events to
         """
         from .physics import perform_ball_wall_collision
@@ -144,7 +147,6 @@ class BallWallCollision(Event):
         ndim = kwargs['ndim']
         gravity = kwargs['gravity']
         wall_restitution = kwargs['wall_restitution']
-        event_generator = kwargs['event_generator']
         event_heap = kwargs['event_heap']
         
         # Update ball to collision time
@@ -198,11 +200,12 @@ class BallGridTransit(Event):
         
         Required kwargs:
             grid: Grid object to update cell memberships
-            event_generator: object to generate new events
+            balls: list of all balls in simulation
+            ndim: number of dimensions
+            gravity: whether gravity is enabled
             event_heap: heap to add new events to
         """
         grid = kwargs['grid']
-        event_generator = kwargs['event_generator']
         event_heap = kwargs['event_heap']
         
         # Update ball's cell (position/velocity/time unchanged)
