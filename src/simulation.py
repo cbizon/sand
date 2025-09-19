@@ -74,6 +74,13 @@ def validate_simulation_parameters(params: Dict[str, Any]) -> None:
     if params['ball_radius'] >= 1.0:
         raise ValueError("ball_radius must be smaller than cell size (1.0)")
     
+    # Check if balls would overlap with current placement strategy (center of cells)
+    # Minimum distance between ball centers is 1.0 (adjacent cells)
+    # So maximum radius is 0.5 to avoid overlaps
+    if params['ball_radius'] > 0.5:
+        raise ValueError(f"ball_radius ({params['ball_radius']}) too large - balls would overlap. Maximum radius is 0.5 for current placement strategy.")
+    
+    
     if len(params['domain_size']) != params['ndim']:
         raise ValueError("domain_size must match ndim")
     
@@ -115,6 +122,10 @@ def initialize_simulation(params: Dict[str, Any]) -> Tuple[List[Ball], List, Gri
     
     if num_balls > total_cells:
         raise ValueError(f"Too many balls ({num_balls}) for domain size {domain_size} ({total_cells} cells)")
+    
+    # Set random seed for reproducible results
+    random_seed = params.get('random_seed', 100)
+    np.random.seed(random_seed)
     
     # Create balls with non-overlapping positions
     balls = []
@@ -184,11 +195,32 @@ def run_simulation(params: Dict[str, Any]) -> None:
     # Generate initial events for all balls
     print(f"Initializing events for {len(balls)} balls...")
     for ball in balls:
-        events = generate_events_for_ball(ball, balls, walls, grid, current_time, ndim, gravity)
+        # For initialization, only pass higher-indexed balls to prevent duplicates
+        higher_indexed_balls = [b for b in balls if b.index > ball.index]
+        
+        # Get neighbor ball indices from grid
+        neighbor_ball_indices = grid.get_balls_in_neighboring_cells(ball.cell)
+        # Filter to only higher-indexed neighboring balls
+        higher_neighbor_balls = [balls[i] for i in neighbor_ball_indices if i > ball.index]
+        
+        print(f"  Ball {ball.index} in cell {ball.cell}: checking {len(higher_neighbor_balls)} higher-indexed neighboring balls {[b.index for b in higher_neighbor_balls]}")
+        
+        # Generate ball-ball events (only with higher-indexed neighbors)
+        from .event_generation import generate_ball_ball_events, generate_ball_wall_events, generate_ball_grid_event
+        events = []
+        events.extend(generate_ball_ball_events(ball, higher_neighbor_balls, current_time, ndim, gravity))
+        
+        # Generate ball-wall events (no duplication issue)
+        events.extend(generate_ball_wall_events(ball, walls, current_time, ndim, gravity))
+        
+        # Generate ball-grid transit event (no duplication issue)
+        events.extend(generate_ball_grid_event(ball, current_time, ndim, gravity))
+        
         for event in events:
             event_heap.add_event(event)
     
-    # Add export events
+    # Add export events (including initial condition at t=0)
+    event_heap.add_event(ExportEvent(0.0))  # Initial condition
     export_time = output_rate
     while export_time <= simulation_time:
         event_heap.add_event(ExportEvent(export_time))
@@ -233,20 +265,3 @@ def run_simulation(params: Dict[str, Any]) -> None:
     print(f"Simulation completed. Processed {event_count} events.")
     print(f"Final time: {current_time}")
 
-
-if __name__ == "__main__":
-    # Example simulation
-    params = {
-        'ndim': 2,
-        'num_balls': 4,
-        'ball_radius': 0.9,
-        'domain_size': (5.0, 3.0),
-        'simulation_time': 10.0,
-        'gravity': False,
-        'ball_restitution': 1.0,
-        'wall_restitution': 1.0,
-        'output_rate': 1.0,
-        'output_dir': 'runs'
-    }
-    
-    run_simulation(params)

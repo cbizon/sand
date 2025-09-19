@@ -11,7 +11,7 @@ class TestSimulation:
         params = {
             'ndim': 2,
             'num_balls': 4,
-            'ball_radius': 0.9,
+            'ball_radius': 0.3,
             'domain_size': (3.0, 2.0),
             'simulation_time': 1.0
         }
@@ -55,7 +55,7 @@ class TestSimulation:
         params = {
             'ndim': 2,
             'num_balls': 2,
-            'ball_radius': 0.9,
+            'ball_radius': 0.3,
             'domain_size': (3.0, 2.0),
             'simulation_time': 1.0
         }
@@ -70,7 +70,7 @@ class TestSimulation:
         assert output_manager is not None
         
         # Check balls are placed correctly
-        assert all(ball.radius == 0.9 for ball in balls)
+        assert all(ball.radius == 0.3 for ball in balls)
         assert all(len(ball.position) == 2 for ball in balls)
         assert all(len(ball.velocity) == 2 for ball in balls)
     
@@ -78,7 +78,7 @@ class TestSimulation:
         params = {
             'ndim': 3,
             'num_balls': 2,
-            'ball_radius': 0.9,
+            'ball_radius': 0.3,
             'domain_size': (2.0, 2.0, 2.0),
             'simulation_time': 1.0
         }
@@ -102,7 +102,7 @@ class TestSimulation:
             params = {
                 'ndim': 2,
                 'num_balls': 2,
-                'ball_radius': 0.9,
+                'ball_radius': 0.3,
                 'domain_size': (3.0, 2.0),
                 'simulation_time': 0.1,  # Very short
                 'gravity': False,
@@ -124,7 +124,7 @@ class TestSimulation:
         params = {
             'ndim': 2,
             'num_balls': 100,  # Too many for 2x2 domain
-            'ball_radius': 0.9,
+            'ball_radius': 0.3,
             'domain_size': (2.0, 2.0),
             'simulation_time': 1.0
         }

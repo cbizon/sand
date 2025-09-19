@@ -39,6 +39,7 @@ class EventHeap:
             if event.valid:
                 return event
             # Invalid event - discard and continue
+            print(f"DISCARDED invalid event: {event}")
         
         return None
     
