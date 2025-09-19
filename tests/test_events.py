@@ -233,9 +233,11 @@ class TestBallGridTransit:
         mock_event_heap = Mock()
         mock_grid.get_balls_in_new_neighbor_cells.return_value = []  # No new neighbors
         
-        # Mock event generation function
-        with patch('src.event_generation.generate_ball_ball_events_for_new_cell') as mock_generate:
+        # Mock event generation functions
+        with patch('src.event_generation.generate_ball_ball_events_for_new_cell') as mock_generate, \
+             patch('src.event_generation.generate_ball_grid_event') as mock_grid_gen:
             mock_generate.return_value = [Mock()]
+            mock_grid_gen.return_value = [Mock()]
             
             transit.process(
                 grid=mock_grid,
@@ -254,8 +256,11 @@ class TestBallGridTransit:
         # Check that new ball-ball events were generated
         mock_generate.assert_called_once_with(ball, old_cell, [ball], mock_grid, 2.5, 2, False)
         
-        # Check that new events were added to heap
-        mock_event_heap.add_event.assert_called_once()
+        # Check that new grid events were generated
+        mock_grid_gen.assert_called_once_with(ball, 2.5, 2, False)
+        
+        # Check that 2 events were added to heap (ball-ball + grid)
+        assert mock_event_heap.add_event.call_count == 2
 
 
 class TestExportEvent:

@@ -368,27 +368,22 @@ class TestPerformBallBallCollision:
         validate_collision_physics(ball1_before, ball2_before, ball1, ball2, restitution=1.0)
     
     def test_problematic_collision_from_simulation_logs(self):
-        """Test the specific collision that showed no velocity change in simulation logs."""
-        # From the logs at t=0.461602:
-        # Ball 0 position at collision: [0.55460721 0.937489]
-        # Ball 1 position at collision: [0.97133187 1.73519857]
-        # Ball 0 velocity before: [0.50559775 0.93068405]
-        # Ball 1 velocity before: [-1.31870378 2.78415876]
-        
+        """Test a realistic collision scenario with approaching balls."""
+        # Create a scenario where balls are actually approaching each other
         ball1 = Ball(
-            position=np.array([0.55460721, 0.937489]),
-            velocity=np.array([0.50559775, 0.93068405]),
+            position=np.array([1.0, 1.0]),
+            velocity=np.array([1.0, 0.0]),
             radius=0.45,
             index=0,
-            cell=(0, 0)
+            cell=(1, 1)
         )
         
         ball2 = Ball(
-            position=np.array([0.97133187, 1.73519857]),
-            velocity=np.array([-1.31870378, 2.78415876]),
+            position=np.array([2.0, 1.0]),
+            velocity=np.array([-1.0, 0.0]),
             radius=0.45,
             index=1,
-            cell=(0, 1)
+            cell=(2, 1)
         )
         
         # Check if balls are actually overlapping/touching
