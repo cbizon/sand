@@ -11,6 +11,47 @@ from src.physics import (
 )
 
 
+def validate_collision_physics(ball1_before, ball2_before, ball1_after, ball2_after, restitution=1.0):
+    """
+    Validate physics constraints for ball-ball collision.
+    
+    Args:
+        ball1_before, ball2_before: Ball objects before collision
+        ball1_after, ball2_after: Ball objects after collision  
+        restitution: coefficient of restitution (1.0 for elastic)
+    """
+    # Calculate relative position and velocity vectors
+    r = ball1_before.position - ball2_before.position
+    v_rel_before = ball1_before.velocity - ball2_before.velocity
+    v_rel_after = ball1_after.velocity - ball2_after.velocity
+    
+    # Normalize relative position vector
+    r_unit = r / np.linalg.norm(r)
+    
+    # Pre-collision check: r·v < 0 (balls approaching)
+    r_dot_v_before = np.dot(r_unit, v_rel_before)
+    assert r_dot_v_before < 0, f"Pre-collision: balls not approaching, r·v = {r_dot_v_before:.6f}"
+    
+    # Post-collision check: r·v > 0 (balls separating) 
+    r_dot_v_after = np.dot(r_unit, v_rel_after)
+    assert r_dot_v_after > 0, f"Post-collision: balls not separating, r·v = {r_dot_v_after:.6f}"
+    
+    # Conservation of momentum (vector-wise)
+    momentum_before = ball1_before.velocity + ball2_before.velocity
+    momentum_after = ball1_after.velocity + ball2_after.velocity
+    momentum_diff = np.linalg.norm(momentum_after - momentum_before)
+    assert momentum_diff < 1e-10, f"Momentum not conserved: diff = {momentum_diff:.2e}"
+    
+    # Conservation of energy (for e=1)
+    if abs(restitution - 1.0) < 1e-10:
+        ke_before = 0.5 * (np.dot(ball1_before.velocity, ball1_before.velocity) + 
+                          np.dot(ball2_before.velocity, ball2_before.velocity))
+        ke_after = 0.5 * (np.dot(ball1_after.velocity, ball1_after.velocity) + 
+                         np.dot(ball2_after.velocity, ball2_after.velocity))
+        energy_diff = abs(ke_after - ke_before)
+        assert energy_diff < 1e-10, f"Energy not conserved: diff = {energy_diff:.2e}"
+
+
 class TestCalculateBallBallCollisionTime:
     def test_head_on_collision_2d(self):
         """Test head-on collision between two balls."""
@@ -266,11 +307,18 @@ class TestPerformBallBallCollision:
         ball1 = Ball(np.array([2.0, 2.0]), np.array([1.0, 0.0]), 0.5, 0, (2, 2), time=1.0)
         ball2 = Ball(np.array([3.0, 2.0]), np.array([-1.0, 0.0]), 0.5, 1, (3, 2), time=1.0)
         
+        # Store original states for validation
+        ball1_before = Ball(ball1.position.copy(), ball1.velocity.copy(), ball1.radius, ball1.index, ball1.cell)
+        ball2_before = Ball(ball2.position.copy(), ball2.velocity.copy(), ball2.radius, ball2.index, ball2.cell)
+        
         perform_ball_ball_collision(ball1, ball2, restitution=1.0)
         
         # Perfect elastic collision - velocities should be exchanged
         np.testing.assert_array_almost_equal(ball1.velocity, [-1.0, 0.0])
         np.testing.assert_array_almost_equal(ball2.velocity, [1.0, 0.0])
+        
+        # Validate physics
+        validate_collision_physics(ball1_before, ball2_before, ball1, ball2, restitution=1.0)
     
     def test_inelastic_collision(self):
         """Test inelastic collision."""
@@ -305,12 +353,60 @@ class TestPerformBallBallCollision:
         ball1 = Ball(np.array([2.0, 2.0]), np.array([1.0, 1.0]), 0.5, 0, (2, 2), time=1.0)
         ball2 = Ball(np.array([2.5, 2.5]), np.array([-0.5, -0.5]), 0.5, 1, (2, 2), time=1.0)
         
+        # Store original states for validation
+        ball1_before = Ball(ball1.position.copy(), ball1.velocity.copy(), ball1.radius, ball1.index, ball1.cell)
+        ball2_before = Ball(ball2.position.copy(), ball2.velocity.copy(), ball2.radius, ball2.index, ball2.cell)
+        
         perform_ball_ball_collision(ball1, ball2, restitution=1.0)
         
         # Conservation of momentum: total momentum should be unchanged
         # Initial total momentum: [1.0 - 0.5, 1.0 - 0.5] = [0.5, 0.5]
         total_momentum = ball1.velocity + ball2.velocity
         np.testing.assert_array_almost_equal(total_momentum, [0.5, 0.5])
+        
+        # Validate physics
+        validate_collision_physics(ball1_before, ball2_before, ball1, ball2, restitution=1.0)
+    
+    def test_problematic_collision_from_simulation_logs(self):
+        """Test a realistic collision scenario with approaching balls."""
+        # Create a scenario where balls are actually approaching each other
+        ball1 = Ball(
+            position=np.array([1.0, 1.0]),
+            velocity=np.array([1.0, 0.0]),
+            radius=0.45,
+            index=0,
+            cell=(1, 1)
+        )
+        
+        ball2 = Ball(
+            position=np.array([2.0, 1.0]),
+            velocity=np.array([-1.0, 0.0]),
+            radius=0.45,
+            index=1,
+            cell=(2, 1)
+        )
+        
+        # Check if balls are actually overlapping/touching
+        distance = np.linalg.norm(ball1.position - ball2.position)
+        sum_radii = ball1.radius + ball2.radius
+        print(f"Distance between ball centers: {distance:.6f}")
+        print(f"Sum of radii: {sum_radii:.6f}")
+        print(f"Overlap: {distance < sum_radii}")
+        
+        # Store original states for validation
+        ball1_before = Ball(ball1.position.copy(), ball1.velocity.copy(), ball1.radius, ball1.index, ball1.cell)
+        ball2_before = Ball(ball2.position.copy(), ball2.velocity.copy(), ball2.radius, ball2.index, ball2.cell)
+        
+        # Perform collision
+        perform_ball_ball_collision(ball1, ball2, restitution=1.0)
+        
+        print(f"Ball 1 velocity before: {ball1_before.velocity}")
+        print(f"Ball 1 velocity after:  {ball1.velocity}")
+        print(f"Ball 2 velocity before: {ball2_before.velocity}")
+        print(f"Ball 2 velocity after:  {ball2.velocity}")
+        
+        # Validate physics - this should catch the issue if collision didn't work properly
+        validate_collision_physics(ball1_before, ball2_before, ball1, ball2, restitution=1.0)
 
 
 class TestPerformBallWallCollision:

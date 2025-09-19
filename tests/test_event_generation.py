@@ -37,8 +37,8 @@ class TestEventGeneration:
         
         assert len(events) == 0
     
-    def test_generate_ball_ball_events_avoids_duplicates(self):
-        # Test that only lower index ball creates events to avoid duplicates
+    def test_generate_ball_ball_events_creates_all_collision_events(self):
+        # Test that ball-ball events are created for all potential collisions
         ball1 = Ball(np.array([1.0, 1.0]), np.array([1.0, 0.0]), 0.1, 0, (1, 1))
         ball2 = Ball(np.array([2.0, 1.0]), np.array([-1.0, 0.0]), 0.1, 1, (2, 1))
         ball3 = Ball(np.array([3.0, 1.0]), np.array([-1.0, 0.0]), 0.1, 2, (3, 1))
@@ -47,13 +47,11 @@ class TestEventGeneration:
         events1 = generate_ball_ball_events(ball1, [ball2, ball3], 0.0, 2, False)
         assert len(events1) == 2
         
-        # ball2 (index 1) should only create event with ball3, not ball1
+        # ball2 (index 1) should create events with both ball1 and ball3 when all are provided
         # Create new ball3 that will collide with ball2 (moving toward each other)
         ball3_colliding = Ball(np.array([4.0, 1.0]), np.array([-2.0, 0.0]), 0.1, 2, (4, 1))
         events2 = generate_ball_ball_events(ball2, [ball1, ball3_colliding], 0.0, 2, False)
-        assert len(events2) == 1
-        assert events2[0].ball1 is ball2
-        assert events2[0].ball2 is ball3_colliding
+        assert len(events2) == 2  # Now creates events with both balls
     
     def test_generate_ball_ball_events_self_skip(self):
         # Should skip self-collision

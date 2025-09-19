@@ -81,16 +81,27 @@ class BallBallCollision(Event):
         ball_restitution = kwargs['ball_restitution']
         event_heap = kwargs['event_heap']
         
+        print(f"PROCESSING BallBallCollision: Ball {self.ball1.index} and Ball {self.ball2.index} at t={self.time:.6f}")
+        print(f"  Ball {self.ball1.index} position before: {self.ball1.position}, velocity: {self.ball1.velocity}")
+        print(f"  Ball {self.ball2.index} position before: {self.ball2.position}, velocity: {self.ball2.velocity}")
+        
         # Update both balls to collision time
         self.ball1.update_to_time(self.time, ndim, gravity)
         self.ball2.update_to_time(self.time, ndim, gravity)
+        print(f"  Ball {self.ball1.index} position at collision: {self.ball1.position}")
+        print(f"  Ball {self.ball2.index} position at collision: {self.ball2.position}")
         
         # Perform collision (updates velocities)
         perform_ball_ball_collision(self.ball1, self.ball2, ball_restitution)
+        print(f"  Ball {self.ball1.index} velocity after: {self.ball1.velocity}")
+        print(f"  Ball {self.ball2.index} velocity after: {self.ball2.velocity}")
         
         # Invalidate all events for both balls (velocities changed)
+        events1 = len(self.ball1.events)
+        events2 = len(self.ball2.events)
         self.ball1.invalidate_all_events()
         self.ball2.invalidate_all_events()
+        print(f"  Invalidated {events1} events for ball {self.ball1.index}, {events2} events for ball {self.ball2.index}")
         
         # Generate new events for both balls (ball-ball, ball-wall, ball-grid)
         from .event_generation import generate_events_for_ball
@@ -100,6 +111,7 @@ class BallBallCollision(Event):
         
         new_events = generate_events_for_ball(self.ball1, balls, walls, grid, self.time, ndim, gravity)
         new_events.extend(generate_events_for_ball(self.ball2, balls, walls, grid, self.time, ndim, gravity))
+        print(f"  Generated {len(new_events)} new events total")
         
         # Add new events to heap
         for event in new_events:
@@ -149,14 +161,22 @@ class BallWallCollision(Event):
         wall_restitution = kwargs['wall_restitution']
         event_heap = kwargs['event_heap']
         
+        print(f"PROCESSING BallWallCollision: Ball {self.ball.index} hits {self.wall} at t={self.time:.6f}")
+        print(f"  Ball position before: {self.ball.position}")
+        print(f"  Ball velocity before: {self.ball.velocity}")
+        
         # Update ball to collision time
         self.ball.update_to_time(self.time, ndim, gravity)
+        print(f"  Ball position at collision: {self.ball.position}")
         
         # Perform collision (updates velocity)
         perform_ball_wall_collision(self.ball, self.wall, wall_restitution)
+        print(f"  Ball velocity after collision: {self.ball.velocity}")
         
         # Invalidate all events for the ball (velocity changed)
+        events_invalidated = len(self.ball.events)
         self.ball.invalidate_all_events()
+        print(f"  Invalidated {events_invalidated} events for ball {self.ball.index}")
         
         # Generate new events for the ball (ball-ball, ball-wall, ball-grid)
         from .event_generation import generate_events_for_ball
@@ -165,6 +185,9 @@ class BallWallCollision(Event):
         grid = kwargs['grid']
         
         new_events = generate_events_for_ball(self.ball, balls, walls, grid, self.time, ndim, gravity)
+        print(f"  Generated {len(new_events)} new events for ball {self.ball.index}:")
+        for event in new_events:
+            print(f"    {event}")
         
         # Add new events to heap
         for event in new_events:
@@ -208,24 +231,37 @@ class BallGridTransit(Event):
         grid = kwargs['grid']
         event_heap = kwargs['event_heap']
         
+        print(f"PROCESSING BallGridTransit: Ball {self.ball.index} moving from {self.ball.cell} to {self.new_cell} at t={self.time:.6f}")
+        print(f"  Ball position: {self.ball.position}")
+        print(f"  Ball velocity: {self.ball.velocity}")
+        
         # Update ball's cell (position/velocity/time unchanged)
         old_cell = self.ball.cell
         self.ball.cell = self.new_cell
         
         # Update grid cell memberships
         grid.move_ball(self.ball.index, old_cell, self.new_cell)
+        print(f"  Updated grid: ball {self.ball.index} moved from {old_cell} to {self.new_cell}")
         
         # Note: No event invalidation needed - velocity unchanged
         
-        # Generate new ball-ball events only for newly adjacent cells
-        # (ball-wall and ball-grid events unchanged since velocity didn't change)
-        from .event_generation import generate_ball_ball_events_for_new_cell
+        # Generate new ball-ball events for newly adjacent cells
+        from .event_generation import generate_ball_ball_events_for_new_cell, generate_ball_grid_event
         balls = kwargs['balls']
         ndim = kwargs['ndim']
         gravity = kwargs['gravity']
         current_time = self.time  # Use event time as current time
         
         new_events = generate_ball_ball_events_for_new_cell(self.ball, old_cell, balls, grid, current_time, ndim, gravity)
+        print(f"  Generated {len(new_events)} new ball-ball events for newly adjacent cells")
+        
+        # Generate new ball-grid transit event for continued movement in new cell
+        grid_events = generate_ball_grid_event(self.ball, current_time, ndim, gravity)
+        new_events.extend(grid_events)
+        print(f"  Generated {len(grid_events)} new ball-grid events for continued movement")
+        
+        for event in new_events:
+            print(f"    {event}")
         
         # Add new events to heap
         for event in new_events:

@@ -12,6 +12,11 @@ This is an implementation of a molecular dynamics simulation of granular media.
 
 ## Key Dependencies
 
+- numpy: numerical computations
+- pytest: testing framework  
+- Flask: web application for visualization
+- matplotlib: plotting and visualization
+
 ## Coordinate System
 
 We use a right-handed coordinate system with the following conventions:
@@ -77,18 +82,21 @@ The basic idea is that for each ball, we figure out what ball it will hit next. 
 - cell size
 - output rate
 - simulation time
+- random_seed (default 100 for reproducible results)
 
-The Data structures described above are initialized. balls must not overlap one another or walls. Ball radius must be smaller than cell size - if not, abort at startup (larger balls would require checking non-adjacent cells for collisions). If our balls are smaller than a cell, then the easiest way to handle this is by putting each ball in its own cell at the center. Velocities are chosen from an n-dimensional zero-centered, sd=1 gaussian.
+The Data structures described above are initialized. balls must not overlap one another or walls. Ball radius must be smaller than cell size - if not, abort at startup (larger balls would require checking non-adjacent cells for collisions). Maximum ball radius is 0.5 for current placement strategy to avoid overlaps. If our balls are smaller than a cell, then the easiest way to handle this is by putting each ball in its own cell at the center. Velocities are chosen from an n-dimensional zero-centered, sd=1 gaussian using the specified random seed.
 
 Cell memberships are updated with the intial positions.
 
 Now we walk over every ball.  Based on its cell, we look at neighboring cells to find the set of balls that this ball might hit.  Based on the position, velocity, and radius of the balls, we calculate when the balls would collide.  Note that gravity does not matter for ball-ball collisions because the 1/2 g t ** 2 terms in the positions of each ball cancel out.  For each collision we find that will occur in the future, we create a BallBallCollision and put it on the heap.
 
+**DUPLICATE PREVENTION**: During initialization only, to avoid creating duplicate ball-ball collision events, each ball should only generate events with higher-indexed balls in its neighborhood. During simulation after collisions, generate events with all neighboring balls.
+
 We also calculate when the ball would leave its current cell, and make a BallGridEvent (gravity affects this timing)
 
 We also calcualte when the ball would hit a wall, and make a BallWallEvent (gravity affects this timing).
 
-We also add events for output events at the specified delta, and an end event
+We also add events for output events at the specified delta (including an initial t=0 export), and an end event
 
 2. In a loop, until we hit the time limit,  chose the next event from the heap.  If it is invalid, discard it.  if it is valid, process it.
 
@@ -106,11 +114,12 @@ We also add events for output events at the specified delta, and an end event
 - Invalidate all events for the ball (velocity changed, so all existing events are invalid)
 - based on the new ball position, time, and velocities, calculate a new round of ball/ball, ball/wall, and ball/grid events and add them to the heap.
 
-5. To process a BallGridCollision
+5. To process a BallGridTransit
 - The ball position, time, and velocity remain the same (no velocity change, so existing events remain valid)
 - Update the ball's cell
 - Update the cell memberships
-- Check for balls in the newly adjacent grids only in direction of movement (in 2D there are 3 of these in new column/plane. In 3D there are 9 in new plane) and calculate BallBall events for these new potential interactions
+- Generate new ball-ball events for balls in newly adjacent cells (only in direction of movement)
+- **CRITICAL**: Generate a new BallGridTransit event for the ball's continued movement in its new cell
 
 6. To process an output event, calculate and write the positions and velocities of all balls into a file. There is no need to update the internal positions or times of the balls
 
@@ -118,11 +127,18 @@ We also add events for output events at the specified delta, and an end event
 
 ## Project structure
 src/
-src/colliders.py
-src/events.py
-src/main.py
-tests/
-runs/
+├── ball.py              # Ball class with position, velocity, radius
+├── wall.py              # Wall classes for boundary collisions
+├── grid.py              # Spatial grid for collision optimization
+├── events.py            # Event classes (BallBallCollision, BallWallCollision, BallGridTransit, ExportEvent, EndEvent)
+├── event_heap.py        # Priority queue for events
+├── event_generation.py  # Functions to generate collision events
+├── physics.py           # Physics calculations (collision times, collision responses)
+├── simulation.py        # Main simulation logic and initialization
+tests/                   # Comprehensive test suite
+runs/                    # Output directory for simulation frames
+app.py                   # Flask web application for visualization
+go.py                    # Example simulation parameters
 
 
 ## ***RULES OF THE ROAD***
@@ -148,4 +164,25 @@ runs/
 - When making pull requests, NEVER ever mention a `co-authored-by` or similar aspects. In particular, never mention the tool used to create the commit message or PR.
 
 - Check git status before commits
+
+## Key Implementation Details
+
+### Event Generation and Duplicate Prevention
+- During initialization: Each ball generates events only with higher-indexed neighboring balls to prevent duplicates
+- During simulation: After velocity changes (collisions), generate events with all neighboring balls
+- The `generate_ball_ball_events()` function creates events between one ball and all balls passed to it
+- Duplicate prevention is controlled by filtering the input balls, not within the function itself
+
+### Grid Transit Events
+- When a ball crosses a cell boundary (BallGridTransit), it must generate:
+  1. New ball-ball collision events with newly adjacent balls
+  2. **A new BallGridTransit event for continued movement in the new cell**
+- Failure to generate new grid transit events causes balls to become "stuck" in wrong cells
+
+### Physics Validation
+- Ball-ball collisions must satisfy:
+  - Pre-collision: r·v < 0 (balls approaching)
+  - Post-collision: r·v > 0 (balls separating)  
+  - Momentum conservation (vector-wise)
+  - Energy conservation (for e=1)
 
