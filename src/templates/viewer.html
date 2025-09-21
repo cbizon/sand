@@ -149,12 +149,49 @@
             font-style: italic;
             color: #666;
         }
+        
+        .run-selector {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .run-selector h3 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+        
+        .run-selector select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+        }
+        
+        .current-run {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Granular Media Simulation Viewer</h1>
+        </div>
+        
+        <div class="run-selector">
+            <h3>Select Simulation Run</h3>
+            <select id="runSelector" onchange="changeRun()">
+                <option value="">Loading runs...</option>
+            </select>
+            <div id="currentRunInfo" class="current-run"></div>
         </div>
         
         <div class="viewer-area">
@@ -196,6 +233,21 @@
             <button id="playBtn" class="btn-play" onclick="togglePlay()">▶ Play</button>
             <button id="nextBtn" class="btn-next" onclick="nextFrame()">Next ▶</button>
         </div>
+        
+        <div class="highlight-controls" style="text-align: center; margin-top: 20px;">
+            <div style="margin-bottom: 15px;">
+                <label for="highlightInput" style="font-weight: bold; margin-right: 10px;">Highlight balls (comma-separated):</label>
+                <input type="text" id="highlightInput" placeholder="e.g., 29,47" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px;">
+                <button onclick="updateHighlight()" style="padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply</button>
+                <button onclick="clearHighlight()" style="padding: 8px 15px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 5px;">Clear</button>
+            </div>
+            <div>
+                <label style="font-weight: bold; margin-right: 10px;">
+                    <input type="checkbox" id="gridToggle" onchange="toggleGrid()" style="margin-right: 5px;">
+                    Show Grid
+                </label>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -206,10 +258,91 @@
         let frameCache = new Map(); // Cache for preloaded frames
         let preloadQueue = []; // Queue for background preloading
         let isPreloading = false;
+        let highlightBalls = []; // Array of ball indices to highlight
+        let showGrid = false; // Whether to show grid overlay
+        
+        // Load available simulation runs
+        async function loadRuns() {
+            try {
+                const response = await fetch('/api/runs');
+                const data = await response.json();
+                
+                const selector = document.getElementById('runSelector');
+                selector.innerHTML = '<option value="">Select a run...</option>';
+                
+                data.runs.forEach(run => {
+                    const option = document.createElement('option');
+                    option.value = run;
+                    option.textContent = run;
+                    if (run === data.current_run) {
+                        option.selected = true;
+                    }
+                    selector.appendChild(option);
+                });
+                
+                // Update current run info
+                const currentRunInfo = document.getElementById('currentRunInfo');
+                if (data.current_run) {
+                    currentRunInfo.textContent = `Currently viewing: ${data.current_run}`;
+                } else {
+                    currentRunInfo.textContent = 'No run currently loaded';
+                }
+                
+            } catch (error) {
+                console.error('Failed to load runs:', error);
+                document.getElementById('runSelector').innerHTML = '<option value="">Error loading runs</option>';
+            }
+        }
+        
+        // Change to a different simulation run
+        async function changeRun() {
+            const selector = document.getElementById('runSelector');
+            const runName = selector.value;
+            
+            if (!runName) return;
+            
+            try {
+                // Show loading message
+                document.getElementById('loadingMessage').style.display = 'block';
+                document.getElementById('frameImage').style.display = 'none';
+                
+                const response = await fetch(`/api/load_run/${runName}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Update current run info
+                    document.getElementById('currentRunInfo').textContent = `Currently viewing: ${runName}`;
+                    
+                    // Reset viewer state
+                    currentFrameIndex = 0;
+                    totalFrames = result.total_frames;
+                    frameCache.clear();
+                    
+                    // Update UI
+                    document.getElementById('totalFrames').textContent = totalFrames;
+                    
+                    if (totalFrames > 0) {
+                        await displayFrame(0);
+                        startBackgroundPreloading();
+                    } else {
+                        showError('No frames found in selected run.');
+                    }
+                } else {
+                    showError(`Failed to load run: ${result.error}`);
+                }
+                
+            } catch (error) {
+                console.error('Failed to change run:', error);
+                showError('Failed to load selected run.');
+            }
+        }
         
         // Initialize the viewer
         async function init() {
             try {
+                // Load available runs first
+                await loadRuns();
+                
                 const response = await fetch('/api/info');
                 const info = await response.json();
                 totalFrames = info.total_frames;
@@ -232,16 +365,29 @@
         
         // Preload frame data without displaying
         async function preloadFrame(frameIndex) {
-            if (frameCache.has(frameIndex)) {
-                return frameCache.get(frameIndex);
+            const cacheKey = `${frameIndex}_${highlightBalls.join(',')}_${showGrid}`;
+            if (frameCache.has(cacheKey)) {
+                return frameCache.get(cacheKey);
             }
             
             try {
-                const response = await fetch(`/api/frame/${frameIndex}`);
+                let url = `/api/frame/${frameIndex}`;
+                const params = [];
+                if (highlightBalls.length > 0) {
+                    params.push(`highlight=${highlightBalls.join(',')}`);
+                }
+                if (showGrid) {
+                    params.push('grid=true');
+                }
+                if (params.length > 0) {
+                    url += '?' + params.join('&');
+                }
+                
+                const response = await fetch(url);
                 const data = await response.json();
                 
                 if (response.ok) {
-                    frameCache.set(frameIndex, data);
+                    frameCache.set(cacheKey, data);
                     return data;
                 }
             } catch (error) {
@@ -281,7 +427,8 @@
             try {
                 showImageLoading(true);
                 
-                let frameData = frameCache.get(frameIndex);
+                const cacheKey = `${frameIndex}_${highlightBalls.join(',')}_${showGrid}`;
+                let frameData = frameCache.get(cacheKey);
                 
                 if (!frameData) {
                     // Not in cache, load it
@@ -368,8 +515,9 @@
                 
                 playInterval = setInterval(() => {
                     if (currentFrameIndex >= totalFrames - 1) {
-                        // Reached the end, stop playing
+                        // Reached the end, stop playing and reset to frame 0
                         togglePlay();
+                        displayFrame(0);
                     } else {
                         // Use synchronous frame switching for smooth playback
                         displayFrameSync(currentFrameIndex + 1);
@@ -387,7 +535,8 @@
         
         // Synchronous frame display for smooth playback (no await)
         function displayFrameSync(frameIndex) {
-            const frameData = frameCache.get(frameIndex);
+            const cacheKey = `${frameIndex}_${highlightBalls.join(',')}_${showGrid}`;
+            const frameData = frameCache.get(cacheKey);
             
             if (frameData) {
                 // Frame is cached, update instantly
@@ -486,6 +635,51 @@
                     break;
             }
         });
+        
+        // Highlight control functions
+        function updateHighlight() {
+            const input = document.getElementById('highlightInput');
+            const inputValue = input.value.trim();
+            
+            if (inputValue) {
+                // Parse comma-separated ball indices
+                highlightBalls = inputValue.split(',')
+                    .map(s => s.trim())
+                    .filter(s => s && !isNaN(s))
+                    .map(s => parseInt(s));
+            } else {
+                highlightBalls = [];
+            }
+            
+            // Clear cache since highlighting changed
+            frameCache.clear();
+            
+            // Refresh current frame with new highlighting
+            displayFrame(currentFrameIndex);
+        }
+        
+        function clearHighlight() {
+            highlightBalls = [];
+            document.getElementById('highlightInput').value = '';
+            
+            // Clear cache since highlighting changed
+            frameCache.clear();
+            
+            // Refresh current frame without highlighting
+            displayFrame(currentFrameIndex);
+        }
+        
+        // Grid control function
+        function toggleGrid() {
+            const gridToggle = document.getElementById('gridToggle');
+            showGrid = gridToggle.checked;
+            
+            // Clear cache since grid display changed
+            frameCache.clear();
+            
+            // Refresh current frame with new grid setting
+            displayFrame(currentFrameIndex);
+        }
         
         // Initialize when page loads
         window.addEventListener('load', init);

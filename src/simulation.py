@@ -45,6 +45,19 @@ class OutputManager:
                     f.write(f"{i} {pos[0]} {pos[1]} {pos[2]} {vel[0]} {vel[1]} {vel[2]}\n")
         
         self.frame_count += 1
+    
+    def write_parameters(self, params: Dict[str, Any]):
+        """
+        Write simulation parameters to file.
+        
+        Args:
+            params: dictionary of simulation parameters
+        """
+        import json
+        filename = os.path.join(self.output_dir, "parameters.json")
+        
+        with open(filename, 'w') as f:
+            json.dump(params, f, indent=2)
 
 
 def validate_simulation_parameters(params: Dict[str, Any]) -> None:
@@ -177,10 +190,23 @@ def run_simulation(params: Dict[str, Any]) -> None:
             - ball_restitution: coefficient of restitution for balls (default 1.0)
             - wall_restitution: coefficient of restitution for walls (default 1.0)
             - output_rate: time interval for output (default 1.0)
-            - output_dir: directory for output files (default 'runs')
+            - run_name: name for this simulation run (default 'default')
+            - output_dir: base directory for output files (default 'runs')
     """
+    # Set up run-specific output directory
+    run_name = params.get('run_name', 'default')
+    base_output_dir = params.get('output_dir', 'runs')
+    run_output_dir = os.path.join(base_output_dir, run_name)
+    
+    # Update params with the run-specific directory
+    params_with_output = params.copy()
+    params_with_output['output_dir'] = run_output_dir
+    
     # Initialize simulation
-    balls, walls, grid, event_heap, output_manager = initialize_simulation(params)
+    balls, walls, grid, event_heap, output_manager = initialize_simulation(params_with_output)
+    
+    # Write simulation parameters to output directory
+    output_manager.write_parameters(params)
     
     # Extract parameters
     ndim = params['ndim']
@@ -193,7 +219,12 @@ def run_simulation(params: Dict[str, Any]) -> None:
     current_time = 0.0
     
     # Generate initial events for all balls
-    print(f"Initializing events for {len(balls)} balls...")
+    import json
+    from .event_generation import generate_ball_ball_events, generate_ball_wall_events, generate_ball_grid_event
+    
+    # Collect all initialization data
+    initial_balls = []
+    
     for ball in balls:
         # For initialization, only pass higher-indexed balls to prevent duplicates
         higher_indexed_balls = [b for b in balls if b.index > ball.index]
@@ -203,21 +234,78 @@ def run_simulation(params: Dict[str, Any]) -> None:
         # Filter to only higher-indexed neighboring balls
         higher_neighbor_balls = [balls[i] for i in neighbor_ball_indices if i > ball.index]
         
-        print(f"  Ball {ball.index} in cell {ball.cell}: checking {len(higher_neighbor_balls)} higher-indexed neighboring balls {[b.index for b in higher_neighbor_balls]}")
+        # Generate events for this ball (suppress individual logging during init)
+        import sys, io
+        original_stdout = sys.stdout
+        sys.stdout = io.StringIO()  # Temporarily capture output
         
-        # Generate ball-ball events (only with higher-indexed neighbors)
-        from .event_generation import generate_ball_ball_events, generate_ball_wall_events, generate_ball_grid_event
         events = []
         events.extend(generate_ball_ball_events(ball, higher_neighbor_balls, current_time, ndim, gravity))
-        
-        # Generate ball-wall events (no duplication issue)
         events.extend(generate_ball_wall_events(ball, walls, current_time, ndim, gravity))
-        
-        # Generate ball-grid transit event (no duplication issue)
         events.extend(generate_ball_grid_event(ball, current_time, ndim, gravity))
         
+        sys.stdout = original_stdout  # Restore output
+        
+        # Convert events to nested structure
+        events_created = []
+        for event in events:
+            if hasattr(event, 'ball1') and hasattr(event, 'ball2'):
+                events_created.append({
+                    "type": "BallBallCollision",
+                    "time": event.time,
+                    "ball1": event.ball1.index,
+                    "ball2": event.ball2.index
+                })
+            elif hasattr(event, 'ball') and hasattr(event, 'wall'):
+                events_created.append({
+                    "type": "BallWallCollision",
+                    "time": event.time,
+                    "ball": event.ball.index,
+                    "wall": str(event.wall)
+                })
+            elif hasattr(event, 'ball') and hasattr(event, 'new_cell'):
+                events_created.append({
+                    "type": "BallGridTransit",
+                    "time": event.time,
+                    "ball": event.ball.index,
+                    "from_cell": list(event.ball.cell),
+                    "to_cell": list(event.new_cell)
+                })
+        
+        # Add ball data to initialization
+        ball_data = {
+            "ball": ball.index,
+            "cell": list(ball.cell),
+            "position": ball.position.tolist(),
+            "velocity": ball.velocity.tolist(),
+            "radius": ball.radius,
+            "higher_neighbor_balls": [b.index for b in higher_neighbor_balls],
+            "events_created": events_created
+        }
+        initial_balls.append(ball_data)
+        
+        # Add events to heap
         for event in events:
             event_heap.add_event(event)
+    
+    # Create comprehensive initialization log
+    init_log = {
+        "event_type": "SimulationStart",
+        "time": current_time,
+        "parameters": {
+            "ndim": ndim,
+            "total_balls": len(balls),
+            "ball_radius": params['ball_radius'],
+            "domain_size": list(params['domain_size']),
+            "simulation_time": simulation_time,
+            "gravity": gravity,
+            "ball_restitution": ball_restitution,
+            "wall_restitution": wall_restitution,
+            "output_rate": output_rate
+        },
+        "initial_balls": initial_balls
+    }
+    print(json.dumps(init_log))
     
     # Add export events (including initial condition at t=0)
     event_heap.add_event(ExportEvent(0.0))  # Initial condition
@@ -232,7 +320,12 @@ def run_simulation(params: Dict[str, Any]) -> None:
     # Simulation state
     simulation_state = {'should_end': False}
     
-    print(f"Starting simulation (t=0 to {simulation_time})...")
+    start_log = {
+        "event_type": "SimulationRunStart",
+        "time": current_time,
+        "target_time": simulation_time
+    }
+    print(json.dumps(start_log))
     event_count = 0
     
     # Main event loop
@@ -246,7 +339,13 @@ def run_simulation(params: Dict[str, Any]) -> None:
         event_count += 1
         
         if event_count % 1000 == 0:
-            print(f"Processing event {event_count}, time={current_time:.3f}")
+            process_log = {
+                "event_type": "ProcessingEvent",
+                "event_count": event_count,
+                "time": current_time,
+                "current_event": str(event)
+            }
+            print(json.dumps(process_log))
         
         # Process event based on type
         event.process(
@@ -262,6 +361,11 @@ def run_simulation(params: Dict[str, Any]) -> None:
             event_heap=event_heap
         )
     
-    print(f"Simulation completed. Processed {event_count} events.")
-    print(f"Final time: {current_time}")
+    end_log = {
+        "event_type": "SimulationComplete",
+        "total_events_processed": event_count,
+        "final_time": current_time,
+        "target_time": simulation_time
+    }
+    print(json.dumps(end_log))
 

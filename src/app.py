@@ -4,7 +4,7 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
-from flask import Flask, render_template, jsonify, send_file
+from flask import Flask, render_template, jsonify, send_file, request, redirect, url_for
 import io
 import base64
 from typing import List, Tuple, Optional
@@ -14,11 +14,68 @@ app = Flask(__name__)
 class FrameReader:
     """Reads and parses simulation frame files."""
     
-    def __init__(self, frames_dir: str = "runs"):
-        self.frames_dir = frames_dir
+    def __init__(self, base_dir: str = "../runs", run_name: str = None):
+        self.base_dir = base_dir
+        self.run_name = run_name
+        self.frames_dir = os.path.join(base_dir, run_name) if run_name else base_dir
         self.frames = []
         self.current_frame = 0
+        self.parameters = {}
+        self.load_parameters()
         self.load_frames()
+    
+    def get_available_runs(self) -> List[str]:
+        """Get list of available simulation runs."""
+        if not os.path.exists(self.base_dir):
+            return []
+        
+        runs = []
+        for item in os.listdir(self.base_dir):
+            item_path = os.path.join(self.base_dir, item)
+            if os.path.isdir(item_path):
+                # Check if it contains frame files
+                has_frames = any(f.startswith('frame_') and f.endswith('.txt') 
+                               for f in os.listdir(item_path) if os.path.isfile(os.path.join(item_path, f)))
+                if has_frames:
+                    runs.append(item)
+        
+        return sorted(runs)
+    
+    def load_run(self, run_name: str):
+        """Load a specific simulation run."""
+        self.run_name = run_name
+        self.frames_dir = os.path.join(self.base_dir, run_name)
+        self.frames = []
+        self.current_frame = 0
+        self.parameters = {}
+        self.load_parameters()
+        self.load_frames()
+    
+    def load_parameters(self):
+        """Load simulation parameters from parameters.json file."""
+        import json
+        params_file = os.path.join(self.frames_dir, "parameters.json")
+        if os.path.exists(params_file):
+            try:
+                with open(params_file, 'r') as f:
+                    self.parameters = json.load(f)
+                print(f"Loaded parameters: {self.parameters}")
+            except Exception as e:
+                print(f"Warning: Could not load parameters from {params_file}: {e}")
+                # Set defaults
+                self.parameters = {
+                    'domain_size': (5.0, 3.0),
+                    'ball_radius': 0.45,
+                    'ndim': 2
+                }
+        else:
+            print(f"Warning: Parameters file {params_file} not found, using defaults")
+            # Set defaults
+            self.parameters = {
+                'domain_size': (5.0, 3.0),
+                'ball_radius': 0.45,
+                'ndim': 2
+            }
     
     def load_frames(self):
         """Load all frame files from directory."""
@@ -110,7 +167,7 @@ class FrameVisualizer:
     def __init__(self, ball_radius: float = 0.45):
         self.ball_radius = ball_radius
         
-    def create_frame_image(self, frame_data: dict, domain_size: Tuple[float, ...] = (5.0, 3.0)) -> str:
+    def create_frame_image(self, frame_data: dict, domain_size: Tuple[float, ...] = (5.0, 3.0), highlight_balls: List[int] = None, show_grid: bool = False) -> str:
         """Create a visualization of a frame and return as base64 encoded image."""
         if not frame_data or not frame_data['positions']:
             return self._create_empty_image()
@@ -118,6 +175,7 @@ class FrameVisualizer:
         positions = frame_data['positions']
         ndim = frame_data['ndim']
         time = frame_data['time']
+        highlight_balls = highlight_balls or []
         
         # Create figure
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -128,12 +186,15 @@ class FrameVisualizer:
             velocities = frame_data['velocities']
             
             # Plot balls as circles and velocity vectors
-            for pos, vel in zip(positions, velocities):
+            for i, (pos, vel) in enumerate(zip(positions, velocities)):
                 x, y = pos[0], pos[1]
                 vx, vy = vel[0], vel[1]
                 
+                # Choose color based on whether ball is highlighted
+                ball_color = 'orange' if i in highlight_balls else 'blue'
+                
                 # Draw ball
-                circle = plt.Circle((x, y), self.ball_radius, color='blue', alpha=0.7)
+                circle = plt.Circle((x, y), self.ball_radius, color=ball_color, alpha=0.7)
                 ax.add_patch(circle)
                 
                 # Draw velocity vector
@@ -145,6 +206,20 @@ class FrameVisualizer:
             # Set domain bounds
             ax.set_xlim(0, domain_size[0])
             ax.set_ylim(0, domain_size[1] if len(domain_size) > 1 else domain_size[0])
+            
+            # Draw grid if requested
+            if show_grid:
+                grid_color = 'lightgray'
+                grid_width = 0.5
+                grid_alpha = 0.7
+                
+                # Draw vertical grid lines at integer boundaries
+                for x in range(int(domain_size[0]) + 1):
+                    ax.axvline(x=x, color=grid_color, linewidth=grid_width, alpha=grid_alpha)
+                
+                # Draw horizontal grid lines at integer boundaries  
+                for y in range(int(domain_size[1]) + 1):
+                    ax.axhline(y=y, color=grid_color, linewidth=grid_width, alpha=grid_alpha)
             
             # Draw walls (inset by 0.01)
             wall_inset = 0.01
@@ -166,12 +241,15 @@ class FrameVisualizer:
             velocities = frame_data['velocities']
             
             # Plot balls as circles and velocity vectors (projected to x-y plane)
-            for pos, vel in zip(positions, velocities):
+            for i, (pos, vel) in enumerate(zip(positions, velocities)):
                 x, y = pos[0], pos[1]  # Project to x-y plane
                 vx, vy = vel[0], vel[1]  # Project velocity to x-y plane
                 
+                # Choose color based on whether ball is highlighted
+                ball_color = 'orange' if i in highlight_balls else 'blue'
+                
                 # Draw ball
-                circle = plt.Circle((x, y), self.ball_radius, color='blue', alpha=0.7)
+                circle = plt.Circle((x, y), self.ball_radius, color=ball_color, alpha=0.7)
                 ax.add_patch(circle)
                 
                 # Draw velocity vector (x-y projection)
@@ -183,6 +261,20 @@ class FrameVisualizer:
             # Set domain bounds
             ax.set_xlim(0, domain_size[0])
             ax.set_ylim(0, domain_size[1] if len(domain_size) > 1 else domain_size[0])
+            
+            # Draw grid if requested (3D case - x-y projection)
+            if show_grid:
+                grid_color = 'lightgray'
+                grid_width = 0.5
+                grid_alpha = 0.7
+                
+                # Draw vertical grid lines at integer boundaries
+                for x in range(int(domain_size[0]) + 1):
+                    ax.axvline(x=x, color=grid_color, linewidth=grid_width, alpha=grid_alpha)
+                
+                # Draw horizontal grid lines at integer boundaries  
+                for y in range(int(domain_size[1]) + 1):
+                    ax.axhline(y=y, color=grid_color, linewidth=grid_width, alpha=grid_alpha)
         
         ax.set_aspect('equal')
         ax.set_title(f'Granular Media Simulation - Time: {time:.3f}')
@@ -227,6 +319,35 @@ def index():
     """Main page with frame viewer."""
     return render_template('viewer.html')
 
+@app.route('/api/runs')
+def get_runs():
+    """API endpoint to get available simulation runs."""
+    runs = frame_reader.get_available_runs()
+    return jsonify({
+        'runs': runs,
+        'current_run': frame_reader.run_name
+    })
+
+@app.route('/api/load_run/<run_name>')
+def load_run(run_name):
+    """API endpoint to load a specific simulation run."""
+    global current_frame_index
+    
+    available_runs = frame_reader.get_available_runs()
+    if run_name not in available_runs:
+        return jsonify({'error': f'Run "{run_name}" not found'}), 404
+    
+    try:
+        frame_reader.load_run(run_name)
+        current_frame_index = 0
+        return jsonify({
+            'success': True,
+            'run_name': run_name,
+            'total_frames': frame_reader.get_num_frames()
+        })
+    except Exception as e:
+        return jsonify({'error': f'Failed to load run: {str(e)}'}), 500
+
 @app.route('/api/frame/<int:frame_index>')
 def get_frame(frame_index):
     """API endpoint to get frame data and image."""
@@ -241,15 +362,34 @@ def get_frame(frame_index):
     if not frame_data:
         return jsonify({'error': 'Frame data not available'}), 404
     
-    # Create visualization
-    image_base64 = visualizer.create_frame_image(frame_data)
+    # Get highlighted balls from query parameter
+    highlight_balls = []
+    highlight_param = request.args.get('highlight', '')
+    if highlight_param:
+        try:
+            highlight_balls = [int(x.strip()) for x in highlight_param.split(',') if x.strip().isdigit()]
+        except ValueError:
+            pass  # Ignore invalid ball indices
+    
+    # Get grid display option from query parameter
+    show_grid = request.args.get('grid', '').lower() in ['true', '1', 'on']
+    
+    # Create visualization using parameters from frame reader
+    domain_size = tuple(frame_reader.parameters.get('domain_size', (5.0, 3.0)))
+    ball_radius = frame_reader.parameters.get('ball_radius', 0.45)
+    
+    # Update visualizer with correct ball radius
+    visualizer.ball_radius = ball_radius
+    image_base64 = visualizer.create_frame_image(frame_data, domain_size, highlight_balls, show_grid)
     
     return jsonify({
         'frame_index': frame_index,
         'total_frames': frame_reader.get_num_frames(),
         'time': frame_data['time'],
         'num_balls': frame_data['num_balls'],
-        'image': image_base64
+        'image': image_base64,
+        'highlighted_balls': highlight_balls,
+        'show_grid': show_grid
     })
 
 @app.route('/api/next')
@@ -257,14 +397,28 @@ def next_frame():
     """Go to next frame."""
     global current_frame_index
     next_index = min(current_frame_index + 1, frame_reader.get_num_frames() - 1)
-    return get_frame(next_index)
+    # Preserve parameters if present
+    params = {}
+    if request.args.get('highlight'):
+        params['highlight'] = request.args.get('highlight')
+    if request.args.get('grid'):
+        params['grid'] = request.args.get('grid')
+    
+    return redirect(url_for('get_frame', frame_index=next_index, **params))
 
 @app.route('/api/prev')
 def prev_frame():
     """Go to previous frame."""
     global current_frame_index
     prev_index = max(current_frame_index - 1, 0)
-    return get_frame(prev_index)
+    # Preserve parameters if present
+    params = {}
+    if request.args.get('highlight'):
+        params['highlight'] = request.args.get('highlight')
+    if request.args.get('grid'):
+        params['grid'] = request.args.get('grid')
+    
+    return redirect(url_for('get_frame', frame_index=prev_index, **params))
 
 @app.route('/api/info')
 def get_info():
