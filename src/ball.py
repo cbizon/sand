@@ -27,9 +27,9 @@ class Ball:
         self.time = time
         self.events: List['Event'] = []
     
-    def get_position_at_time(self, t: float, ndim: int, gravity: bool = False) -> np.ndarray:
+    def get_position_and_velocity_at_time(self, t: float, ndim: int, gravity: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Calculate ball position at given time, accounting for gravity.
+        Calculate ball position and velocity at given time, accounting for gravity.
         
         Args:
             t: target time
@@ -37,27 +37,30 @@ class Ball:
             gravity: whether gravity is enabled (g=1 if True, scaled time units)
             
         Returns:
-            position at time t
-            
-        Note: In right-handed coordinate system:
-        - 2D: x (horizontal right), y (vertical up)
-        - 3D: x (horizontal right), y (vertical up), z (out of screen toward viewer)
-        - Gravity acts in negative y direction (downward)
+            tuple of (position, velocity) at time t
         """
         dt = t - self.time
         if dt < 0:
-            raise ValueError(f"Cannot get position at time {t} before ball's current time {self.time}")
+            raise ValueError(f"Cannot get position/velocity at time {t} before ball's current time {self.time}")
         
-        # Position = initial_position + velocity * dt + 0.5 * gravity * dt^2
-        new_position = self.position + self.velocity * dt
+        # Calculate position
+        position = self.position + self.velocity * dt
         
         if gravity and ndim >= 2:
             # Add gravitational displacement (gravity acts in negative y direction, g=1 in scaled time)
             gravity_displacement = np.zeros_like(self.position)
             gravity_displacement[1] = -0.5 * dt * dt  # g=1 in scaled time units
-            new_position += gravity_displacement
-            
-        return new_position
+            position += gravity_displacement
+        
+        # Calculate velocity
+        velocity = self.velocity.copy()
+        if gravity and ndim >= 2:
+            # Velocity changes due to gravity: v = v0 + g*t (g acts in negative y direction)
+            gravity_velocity = np.zeros_like(self.velocity)
+            gravity_velocity[1] = -dt  # g=1 in scaled time units
+            velocity += gravity_velocity
+        
+        return position, velocity
     
     def update_to_time(self, t: float, ndim: int, gravity: bool = False):
         """
@@ -73,14 +76,8 @@ class Ball:
         
         dt = t - self.time
         
-        # Update position
-        self.position = self.get_position_at_time(t, ndim, gravity)
-        
-        # Update velocity (gravity affects velocity, g=1 in scaled time units)
-        if gravity and ndim >= 2:
-            gravity_velocity = np.zeros_like(self.velocity)
-            gravity_velocity[1] = -dt  # g=1 in scaled time units
-            self.velocity += gravity_velocity
+        # Update position and velocity
+        self.position, self.velocity = self.get_position_and_velocity_at_time(t, ndim, gravity)
         
         # Update time
         self.time = t

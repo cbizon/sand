@@ -109,14 +109,17 @@ class TestSimulation:
                 'ball_restitution': 1.0,
                 'wall_restitution': 1.0,
                 'output_rate': 0.05,
+                'run_name': 'test_run',
                 'output_dir': temp_dir
             }
             
             # Should run without errors
             run_simulation(params)
             
-            # Check that output files were created
-            output_files = [f for f in os.listdir(temp_dir) if f.startswith('frame_')]
+            # Check that output files were created in the run subdirectory
+            run_dir = os.path.join(temp_dir, 'test_run')
+            assert os.path.exists(run_dir)
+            output_files = [f for f in os.listdir(run_dir) if f.startswith('frame_')]
             assert len(output_files) >= 1
     
     def test_too_many_balls_error(self):

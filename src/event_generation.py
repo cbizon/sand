@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 def generate_ball_ball_events(ball: 'Ball', other_balls: List['Ball'], 
                              current_time: float, ndim: int, 
-                             gravity: bool = False) -> List[BallBallCollision]:
+                             gravity: bool = False, log_events: bool = True) -> List[BallBallCollision]:
     """
     Generate ball-ball collision events for a ball against a list of other balls.
     
@@ -39,12 +39,29 @@ def generate_ball_ball_events(ball: 'Ball', other_balls: List['Ball'],
             ball, other_ball, current_time, ndim, gravity
         )
         
-        print(f"    Ball {ball.index} vs Ball {other_ball.index}: collision_time = {collision_time}")
-        
         if collision_time is not None:
             event = BallBallCollision(collision_time, ball, other_ball)
             events.append(event)
-            print(f"CREATED BallBallCollision: Ball {ball.index} vs Ball {other_ball.index} at t={collision_time:.6f}")
+            
+            import json
+            log_entry = {
+                "event_type": "EventCreated",
+                "created_event": "BallBallCollision", 
+                "time": collision_time,
+                "ball1": ball.index,
+                "ball2": other_ball.index
+            }
+            print(json.dumps(log_entry))
+        else:
+            import json
+            log_entry = {
+                "event_type": "CollisionCheck",
+                "result": "no_collision",
+                "ball1": ball.index, 
+                "ball2": other_ball.index,
+                "current_time": current_time
+            }
+            print(json.dumps(log_entry))
     
     return events
 
@@ -75,7 +92,16 @@ def generate_ball_wall_events(ball: 'Ball', walls: List['Wall'],
         if collision_time is not None:
             event = BallWallCollision(collision_time, ball, wall)
             events.append(event)
-            print(f"CREATED BallWallCollision: Ball {ball.index} vs {wall} at t={collision_time:.6f}")
+            
+            import json
+            log_entry = {
+                "event_type": "EventCreated",
+                "created_event": "BallWallCollision",
+                "time": collision_time,
+                "ball": ball.index,
+                "wall": str(wall)
+            }
+            print(json.dumps(log_entry))
     
     return events
 
@@ -102,7 +128,17 @@ def generate_ball_grid_event(ball: 'Ball', current_time: float, ndim: int,
         transit_time, new_cell = result
         event = BallGridTransit(transit_time, ball, new_cell)
         events.append(event)
-        print(f"CREATED BallGridTransit: Ball {ball.index} from {ball.cell} to {new_cell} at t={transit_time:.6f}")
+        
+        import json
+        log_entry = {
+            "event_type": "EventCreated",
+            "created_event": "BallGridTransit",
+            "time": transit_time,
+            "ball": ball.index,
+            "from_cell": ball.cell,
+            "to_cell": new_cell
+        }
+        print(json.dumps(log_entry))
     
     return events
 
@@ -131,8 +167,8 @@ def generate_events_for_ball(ball: 'Ball', balls: List['Ball'], walls: List['Wal
     neighbor_ball_indices = grid.get_balls_in_neighboring_cells(ball.cell)
     neighbor_balls = [balls[i] for i in neighbor_ball_indices]
     
-    # Debug: show which cells are being checked
-    all_neighbor_cells = []
+    # Generate neighbor cell info for JSON log
+    neighbor_cells_info = {}
     if ndim == 2:
         for di in [-1, 0, 1]:
             for dj in [-1, 0, 1]:
@@ -140,12 +176,20 @@ def generate_events_for_ball(ball: 'Ball', balls: List['Ball'], walls: List['Wal
                 if (0 <= neighbor_cell[0] < grid.num_cells[0] and 
                     0 <= neighbor_cell[1] < grid.num_cells[1]):
                     balls_in_cell = grid.cells[neighbor_cell[0]][neighbor_cell[1]]
-                    all_neighbor_cells.append(f"{neighbor_cell}:{balls_in_cell}")
+                    neighbor_cells_info[str(neighbor_cell)] = balls_in_cell
                 else:
-                    all_neighbor_cells.append(f"{neighbor_cell}:OUT_OF_BOUNDS")
+                    neighbor_cells_info[str(neighbor_cell)] = "OUT_OF_BOUNDS"
     
-    print(f"  Ball {ball.index} in cell {ball.cell}: all 9 neighboring cells: {all_neighbor_cells}")
-    print(f"  Ball {ball.index} in cell {ball.cell}: checking {len(neighbor_balls)} neighboring balls {[b.index for b in neighbor_balls]}")
+    import json
+    log_entry = {
+        "event_type": "EventGeneration",
+        "ball": ball.index,
+        "cell": ball.cell,
+        "current_time": current_time,
+        "neighbor_cells": neighbor_cells_info,
+        "neighbor_balls": [b.index for b in neighbor_balls]
+    }
+    print(json.dumps(log_entry))
     events.extend(generate_ball_ball_events(ball, neighbor_balls, current_time, ndim, gravity))
     
     # Ball-wall events

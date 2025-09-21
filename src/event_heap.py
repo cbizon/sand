@@ -39,7 +39,36 @@ class EventHeap:
             if event.valid:
                 return event
             # Invalid event - discard and continue
-            print(f"DISCARDED invalid event: {event}")
+            import json
+            discard_log = {
+                "event_type": "EventDiscarded",
+                "time": event.time,
+                "discarded_event": str(event),
+                "reason": "invalid"
+            }
+            
+            # Add ball information based on event type
+            if hasattr(event, 'ball1') and hasattr(event, 'ball2'):
+                # BallBallCollision
+                discard_log["ball1"] = event.ball1.index
+                discard_log["ball2"] = event.ball2.index
+                discard_log["event_subtype"] = "BallBallCollision"
+            elif hasattr(event, 'ball') and hasattr(event, 'wall'):
+                # BallWallCollision
+                discard_log["ball"] = event.ball.index
+                discard_log["wall"] = str(event.wall)
+                discard_log["event_subtype"] = "BallWallCollision"
+            elif hasattr(event, 'ball') and hasattr(event, 'new_cell'):
+                # BallGridTransit
+                discard_log["ball"] = event.ball.index
+                discard_log["from_cell"] = list(event.ball.cell)
+                discard_log["to_cell"] = list(event.new_cell)
+                discard_log["event_subtype"] = "BallGridTransit"
+            elif hasattr(event, 'ball'):
+                # Other ball events
+                discard_log["ball"] = event.ball.index
+                
+            print(json.dumps(discard_log))
         
         return None
     

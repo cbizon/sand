@@ -1,0 +1,7 @@
+# Use uv to install dependencies:
+# uv add flask matplotlib
+#
+# Dependencies needed:
+flask>=2.0.0
+matplotlib>=3.5.0
+numpy>=1.21.0
