@@ -53,56 +53,69 @@ class TestBall:
         assert ball.position[0] == 1.0
         assert ball.velocity[0] == 0.5
     
-    def test_get_position_at_time_no_gravity(self):
-        """Test position calculation at future time without gravity."""
+    def test_get_position_and_velocity_at_time_no_gravity(self):
+        """Test position and velocity calculation at future time without gravity."""
         position = np.array([1.0, 2.0])
         velocity = np.array([0.5, -0.3])
         ball = Ball(position, velocity, 0.1, 0, (1, 2), time=1.0)
         
-        # Calculate position 2 seconds later
-        new_pos = ball.get_position_at_time(3.0, ndim=2, gravity=False)
+        # Calculate position and velocity 2 seconds later
+        new_pos, new_vel = ball.get_position_and_velocity_at_time(3.0, ndim=2, gravity=False)
         expected_pos = np.array([1.0 + 0.5 * 2, 2.0 + (-0.3) * 2])
+        expected_vel = np.array([0.5, -0.3])  # velocity unchanged without gravity
         
         np.testing.assert_array_almost_equal(new_pos, expected_pos)
+        np.testing.assert_array_almost_equal(new_vel, expected_vel)
     
-    def test_get_position_at_time_with_gravity_2d(self):
-        """Test position calculation with gravity in 2D."""
+    def test_get_position_and_velocity_at_time_with_gravity_2d(self):
+        """Test position and velocity calculation with gravity in 2D."""
         position = np.array([1.0, 2.0])
         velocity = np.array([0.5, -0.3])
         ball = Ball(position, velocity, 0.1, 0, (1, 2), time=1.0)
         
-        # Calculate position 2 seconds later with gravity
-        new_pos = ball.get_position_at_time(3.0, ndim=2, gravity=True)
+        # Calculate position and velocity 2 seconds later with gravity
+        new_pos, new_vel = ball.get_position_and_velocity_at_time(3.0, ndim=2, gravity=True)
         dt = 2.0
         expected_pos = np.array([
             1.0 + 0.5 * dt,  # x unchanged by gravity
             2.0 + (-0.3) * dt + (-0.5) * dt * dt  # y affected by gravity (g=1)
         ])
+        expected_vel = np.array([
+            0.5,  # x velocity unchanged
+            -0.3 + (-dt)  # y velocity affected by gravity
+        ])
         
         np.testing.assert_array_almost_equal(new_pos, expected_pos)
+        np.testing.assert_array_almost_equal(new_vel, expected_vel)
     
-    def test_get_position_at_time_with_gravity_3d(self):
-        """Test position calculation with gravity in 3D."""
+    def test_get_position_and_velocity_at_time_with_gravity_3d(self):
+        """Test position and velocity calculation with gravity in 3D."""
         position = np.array([1.0, 2.0, 3.0])
         velocity = np.array([0.5, -0.3, 0.2])
         ball = Ball(position, velocity, 0.1, 0, (1, 2, 3), time=0.0)
         
-        # Calculate position 1 second later with gravity
-        new_pos = ball.get_position_at_time(1.0, ndim=3, gravity=True)
+        # Calculate position and velocity 1 second later with gravity
+        new_pos, new_vel = ball.get_position_and_velocity_at_time(1.0, ndim=3, gravity=True)
         expected_pos = np.array([
             1.0 + 0.5,  # x unchanged by gravity
             2.0 + (-0.3) + (-0.5),  # y affected by gravity (g=1)
             3.0 + 0.2   # z unchanged by gravity
         ])
+        expected_vel = np.array([
+            0.5,  # x velocity unchanged
+            -0.3 + (-1.0),  # y velocity affected by gravity
+            0.2   # z velocity unchanged
+        ])
         
         np.testing.assert_array_almost_equal(new_pos, expected_pos)
+        np.testing.assert_array_almost_equal(new_vel, expected_vel)
     
-    def test_get_position_at_time_past_time_error(self):
-        """Test that getting position at past time raises error."""
+    def test_get_position_and_velocity_at_time_past_time_error(self):
+        """Test that getting position and velocity at past time raises error."""
         ball = Ball(np.array([1.0, 2.0]), np.array([0.5, -0.3]), 0.1, 0, (1, 2), time=5.0)
         
-        with pytest.raises(ValueError, match="Cannot get position at time 3.0 before ball's current time 5.0"):
-            ball.get_position_at_time(3.0, ndim=2)
+        with pytest.raises(ValueError, match="Cannot get position/velocity at time 3.0 before ball's current time 5.0"):
+            ball.get_position_and_velocity_at_time(3.0, ndim=2)
     
     def test_update_to_time_no_gravity(self):
         """Test updating ball to future time without gravity."""

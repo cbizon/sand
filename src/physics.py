@@ -13,66 +13,161 @@ def calculate_ball_ball_collision_time(ball1: 'Ball', ball2: 'Ball',
     """
     Calculate when two balls will collide, if at all.
     
+    Uses exact equations of motion accounting for different reference times:
+    Ball 1: x1(t) = x0 + v0(t - t0) + 0.5*g*(t - t0)^2
+    Ball 2: x2(t) = x1 + v1(t - t1) + 0.5*g*(t - t1)^2
+    
     Args:
-        ball1: first ball
-        ball2: second ball 
-        current_time: current simulation time
+        ball1: first ball with position, velocity, and time
+        ball2: second ball with position, velocity, and time
+        current_time: current simulation time (collision must be after this)
         ndim: number of dimensions
         gravity: whether gravity is enabled
         
     Returns:
         collision time if collision occurs in future, None otherwise
     """
-    # Get positions at current time
-    pos1 = ball1.get_position_at_time(current_time, ndim, gravity)
-    pos2 = ball2.get_position_at_time(current_time, ndim, gravity)
+    # Ball parameters
+    x0, v0, t0 = ball1.position, ball1.velocity, ball1.time
+    x1, v1, t1 = ball2.position, ball2.velocity, ball2.time
+    r = ball1.radius + ball2.radius
     
-    # Relative position and velocity
-    rel_pos = pos2 - pos1
-    rel_vel = ball2.velocity - ball1.velocity
+    if not gravity or ndim < 2:
+        # Without gravity, use the simple linear approach but with correct reference times
+        # Get positions and velocities at current time
+        pos1, vel1 = ball1.get_position_and_velocity_at_time(current_time, ndim, gravity)
+        pos2, vel2 = ball2.get_position_and_velocity_at_time(current_time, ndim, gravity)
+        
+        # Relative position and velocity
+        rel_pos = pos2 - pos1
+        rel_vel = vel2 - vel1
+        
+        # CHEAP TEST FIRST: Check if balls are moving apart
+        pos_dot_vel = np.dot(rel_pos, rel_vel)
+        if pos_dot_vel > 0:
+            return None  # Moving apart, no collision
+        
+        # CHEAP TEST: Check if relative velocity is zero
+        rel_vel_sq = np.dot(rel_vel, rel_vel)
+        if rel_vel_sq < 1e-24:
+            return None
+        
+        # Solve quadratic: |rel_pos + rel_vel * dt|^2 = r^2
+        rel_pos_sq = np.dot(rel_pos, rel_pos)
+        a = rel_vel_sq
+        b = 2 * pos_dot_vel
+        c = rel_pos_sq - r*r
+        
+        discriminant = b*b - 4*a*c
+        if discriminant < 0:
+            return None
+        
+        sqrt_discriminant = math.sqrt(discriminant)
+        t1 = (-b - sqrt_discriminant) / (2*a)
+        t2 = (-b + sqrt_discriminant) / (2*a)
+        
+        # Find earliest positive time
+        collision_time = None
+        if t1 > 1e-12:
+            collision_time = t1
+        if t2 > 1e-12 and (collision_time is None or t2 < collision_time):
+            collision_time = t2
+        
+        if collision_time is None:
+            return None
+        
+        return current_time + collision_time
     
-    # CHEAP TEST FIRST: Check if balls are moving apart
-    # If rel_pos · rel_vel > 0, balls are moving away from each other
-    pos_dot_vel = np.dot(rel_pos, rel_vel)
-    if pos_dot_vel > 0:
-        return None  # Moving apart, no collision
-    
-    # CHEAP TEST: Check if relative velocity is zero
-    rel_vel_sq = np.dot(rel_vel, rel_vel)  # |rel_vel|^2
-    if rel_vel_sq < 1e-24:  # Effectively zero relative velocity
-        return None
-    
-    # Now do the expensive calculations
-    rel_pos_sq = np.dot(rel_pos, rel_pos)  # |rel_pos|^2
-    touch_distance_sq = (ball1.radius + ball2.radius)**2
-    
-    # Solve quadratic: |rel_pos + rel_vel * t|^2 = touch_distance^2
-    # a*t^2 + b*t + c = 0 where:
-    a = rel_vel_sq  # |rel_vel|^2
-    b = 2 * pos_dot_vel  # 2*(rel_pos·rel_vel) - already computed!
-    c = rel_pos_sq - touch_distance_sq  # |rel_pos|^2 - r^2
-    
-    # Check discriminant before expensive sqrt
-    discriminant = b*b - 4*a*c
-    if discriminant < 0:
-        return None
-    
-    # Only compute sqrt if we need it
-    sqrt_discriminant = math.sqrt(discriminant)
-    t1 = (-b - sqrt_discriminant) / (2*a)
-    t2 = (-b + sqrt_discriminant) / (2*a)
-    
-    # We want the earliest positive time
-    collision_time = None
-    if t1 > 1e-12:
-        collision_time = t1
-    if t2 > 1e-12 and (collision_time is None or t2 < collision_time):
-        collision_time = t2
-    
-    if collision_time is None:
-        return None
-    
-    return current_time + collision_time
+    else:
+        # With gravity, use exact equations of motion
+        # Position difference: x2(t) - x1(t) = distance_vector(t)
+        # |distance_vector(t)| = r when collision occurs
+        
+        # Set up the equation: |x1 + v1(t-t1) + 0.5*g*(t-t1)^2 - x0 - v0(t-t0) - 0.5*g*(t-t0)^2|^2 = r^2
+        
+        # Let's expand this step by step:
+        # dx = x1 - x0
+        # dv = v1 - v0  
+        # dt_offset = t1 - t0
+        
+        dx = x1 - x0
+        dv = v1 - v0
+        dt_offset = t1 - t0
+        
+        # For the gravity term: 0.5*g*[(t-t1)^2 - (t-t0)^2]
+        # = 0.5*g*[t^2 - 2*t*t1 + t1^2 - t^2 + 2*t*t0 - t0^2]
+        # = 0.5*g*[2*t*(t0-t1) + t1^2 - t0^2]
+        # = g*t*(t0-t1) + 0.5*g*(t1^2 - t0^2)
+        
+        # So distance_vector(t) = dx + dv*t - dv*t0 + v1*t0 - v1*t1 + g*t*(t0-t1) + 0.5*g*(t1^2 - t0^2)
+        # Simplifying: distance_vector(t) = [dx + dv*(-t0) + v1*(t0-t1) + 0.5*g*(t1^2-t0^2)] + t*[dv + g*(t0-t1)]
+        
+        # Set up gravity vector g = [0, -1] in 2D
+        g = np.zeros_like(x0)
+        g[1] = -1.0  # gravity in negative y direction
+        
+        # Constant term
+        const_term = dx + dv*(-t0) + v1*(t0-t1) + 0.5*g*(t1*t1 - t0*t0)
+        
+        # Linear coefficient 
+        linear_coeff = dv + g*(t0-t1)
+        
+        # Gravity coefficient (coefficient of t^2 term is zero because gravity affects both balls equally)
+        # Wait, let me recalculate this properly...
+        
+        # Actually, let's be more systematic. The distance vector at time t is:
+        # d(t) = [x1 + v1*(t-t1) + 0.5*g*(t-t1)^2] - [x0 + v0*(t-t0) + 0.5*g*(t-t0)^2]
+        
+        # Expanding:
+        # d(t) = x1 - x0 + v1*t - v1*t1 - v0*t + v0*t0 + 0.5*g*[(t-t1)^2 - (t-t0)^2]
+        # d(t) = (x1-x0) + t*(v1-v0) + (v0*t0 - v1*t1) + 0.5*g*[(t-t1)^2 - (t-t0)^2]
+        
+        # For the gravity term:
+        # (t-t1)^2 - (t-t0)^2 = t^2 - 2*t*t1 + t1^2 - t^2 + 2*t*t0 - t0^2
+        #                     = 2*t*(t0-t1) + (t1^2 - t0^2)
+        
+        # So: d(t) = (x1-x0) + (v0*t0-v1*t1) + 0.5*g*(t1^2-t0^2) + t*[(v1-v0) + g*(t0-t1)]
+        
+        A = dx + v0*t0 - v1*t1 + 0.5*g*(t1*t1 - t0*t0)  # constant term
+        B = dv + g*(t0-t1)  # linear term coefficient
+        
+        # Now we need to solve |A + B*t|^2 = r^2
+        # (A + B*t) · (A + B*t) = r^2
+        # A·A + 2*A·B*t + B·B*t^2 = r^2
+        # B·B*t^2 + 2*A·B*t + (A·A - r^2) = 0
+        
+        a_coeff = np.dot(B, B)  # coefficient of t^2
+        b_coeff = 2 * np.dot(A, B)  # coefficient of t
+        c_coeff = np.dot(A, A) - r*r  # constant term
+        
+        # Check if this is actually a quadratic (a_coeff != 0)
+        if abs(a_coeff) < 1e-24:
+            # Linear case: 2*A·B*t + (A·A - r^2) = 0
+            if abs(b_coeff) < 1e-24:
+                return None  # No solution
+            t_collision = -c_coeff / b_coeff
+            if t_collision > current_time + 1e-12:
+                return t_collision
+            else:
+                return None
+        
+        # Solve quadratic
+        discriminant = b_coeff*b_coeff - 4*a_coeff*c_coeff
+        if discriminant < 0:
+            return None
+        
+        sqrt_discriminant = math.sqrt(discriminant)
+        t1_sol = (-b_coeff - sqrt_discriminant) / (2*a_coeff)
+        t2_sol = (-b_coeff + sqrt_discriminant) / (2*a_coeff)
+        
+        # Find earliest time that's in the future
+        collision_time = None
+        if t1_sol > current_time + 1e-12:
+            collision_time = t1_sol
+        if t2_sol > current_time + 1e-12 and (collision_time is None or t2_sol < collision_time):
+            collision_time = t2_sol
+        
+        return collision_time
 
 
 def calculate_ball_wall_collision_time(ball: 'Ball', wall: 'Wall', 
@@ -91,9 +186,8 @@ def calculate_ball_wall_collision_time(ball: 'Ball', wall: 'Wall',
     Returns:
         collision time if collision occurs in future, None otherwise
     """
-    # Get ball position at current time
-    pos = ball.get_position_at_time(current_time, ndim, gravity)
-    vel = ball.velocity
+    # Get ball position and velocity at current time
+    pos, vel = ball.get_position_and_velocity_at_time(current_time, ndim, gravity)
     
     wall_axis = wall.normal_axis
     
@@ -164,8 +258,7 @@ def calculate_ball_grid_transit_time(ball: 'Ball', current_time: float, ndim: in
     Returns:
         (collision_time, new_cell) if transit occurs, None otherwise
     """
-    pos = ball.get_position_at_time(current_time, ndim, gravity)
-    vel = ball.velocity
+    pos, vel = ball.get_position_and_velocity_at_time(current_time, ndim, gravity)
     
     earliest_time = None
     new_cell = None

@@ -81,27 +81,55 @@ class BallBallCollision(Event):
         ball_restitution = kwargs['ball_restitution']
         event_heap = kwargs['event_heap']
         
-        print(f"PROCESSING BallBallCollision: Ball {self.ball1.index} and Ball {self.ball2.index} at t={self.time:.6f}")
-        print(f"  Ball {self.ball1.index} position before: {self.ball1.position}, velocity: {self.ball1.velocity}")
-        print(f"  Ball {self.ball2.index} position before: {self.ball2.position}, velocity: {self.ball2.velocity}")
+        import json
+        
+        log_entry = {
+            "event_type": "BallBallCollision",
+            "time": self.time,
+            "ball1": {
+                "index": self.ball1.index,
+                "position_before": self.ball1.position.tolist(),
+                "velocity_before": self.ball1.velocity.tolist(),
+                "cell": self.ball1.cell,
+                "time": self.ball1.time
+            },
+            "ball2": {
+                "index": self.ball2.index, 
+                "position_before": self.ball2.position.tolist(),
+                "velocity_before": self.ball2.velocity.tolist(),
+                "cell": self.ball2.cell,
+                "time": self.ball2.time
+            }
+        }
         
         # Update both balls to collision time
         self.ball1.update_to_time(self.time, ndim, gravity)
         self.ball2.update_to_time(self.time, ndim, gravity)
-        print(f"  Ball {self.ball1.index} position at collision: {self.ball1.position}")
-        print(f"  Ball {self.ball2.index} position at collision: {self.ball2.position}")
+        
+        # Add collision positions to log
+        log_entry["ball1"]["position_at_collision"] = self.ball1.position.tolist()
+        log_entry["ball2"]["position_at_collision"] = self.ball2.position.tolist()
         
         # Perform collision (updates velocities)
         perform_ball_ball_collision(self.ball1, self.ball2, ball_restitution)
-        print(f"  Ball {self.ball1.index} velocity after: {self.ball1.velocity}")
-        print(f"  Ball {self.ball2.index} velocity after: {self.ball2.velocity}")
+        
+        # Add final velocities to log
+        log_entry["ball1"]["velocity_after"] = self.ball1.velocity.tolist()
+        log_entry["ball2"]["velocity_after"] = self.ball2.velocity.tolist()
+        
+        # Print updated log entry
+        print(json.dumps(log_entry))
         
         # Invalidate all events for both balls (velocities changed)
         events1 = len(self.ball1.events)
         events2 = len(self.ball2.events)
         self.ball1.invalidate_all_events()
         self.ball2.invalidate_all_events()
-        print(f"  Invalidated {events1} events for ball {self.ball1.index}, {events2} events for ball {self.ball2.index}")
+        
+        log_entry["events_invalidated"] = {
+            "ball1": events1,
+            "ball2": events2
+        }
         
         # Generate new events for both balls (ball-ball, ball-wall, ball-grid)
         from .event_generation import generate_events_for_ball
@@ -109,9 +137,39 @@ class BallBallCollision(Event):
         walls = kwargs['walls']
         grid = kwargs['grid']
         
+        # Generate new events for both balls (suppress individual event logging)
+        import sys, io
+        original_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        
         new_events = generate_events_for_ball(self.ball1, balls, walls, grid, self.time, ndim, gravity)
         new_events.extend(generate_events_for_ball(self.ball2, balls, walls, grid, self.time, ndim, gravity))
-        print(f"  Generated {len(new_events)} new events total")
+        
+        # Restore stdout
+        sys.stdout = original_stdout
+        
+        # Add event generation summary to collision log with detailed event info
+        event_details = []
+        for event in new_events:
+            event_info = {"type": event.__class__.__name__, "time": event.time}
+            if hasattr(event, 'ball1') and hasattr(event, 'ball2'):
+                event_info["ball1"] = event.ball1.index
+                event_info["ball2"] = event.ball2.index
+            elif hasattr(event, 'ball'):
+                event_info["ball"] = event.ball.index
+                if hasattr(event, 'wall'):
+                    event_info["wall"] = str(event.wall)
+                elif hasattr(event, 'new_cell'):
+                    event_info["new_cell"] = list(event.new_cell)
+            event_details.append(event_info)
+        
+        log_entry["new_events_generated"] = {
+            "count": len(new_events),
+            "events": event_details
+        }
+        
+        # Final log output
+        print(json.dumps(log_entry))
         
         # Add new events to heap
         for event in new_events:
@@ -161,33 +219,72 @@ class BallWallCollision(Event):
         wall_restitution = kwargs['wall_restitution']
         event_heap = kwargs['event_heap']
         
-        print(f"PROCESSING BallWallCollision: Ball {self.ball.index} hits {self.wall} at t={self.time:.6f}")
-        print(f"  Ball position before: {self.ball.position}")
-        print(f"  Ball velocity before: {self.ball.velocity}")
+        import json
+        
+        log_entry = {
+            "event_type": "BallWallCollision",
+            "time": self.time,
+            "ball": {
+                "index": self.ball.index,
+                "position_before": self.ball.position.tolist(),
+                "velocity_before": self.ball.velocity.tolist(),
+                "cell": self.ball.cell,
+                "time": self.ball.time
+            },
+            "wall": str(self.wall)
+        }
         
         # Update ball to collision time
         self.ball.update_to_time(self.time, ndim, gravity)
-        print(f"  Ball position at collision: {self.ball.position}")
+        log_entry["ball"]["position_at_collision"] = self.ball.position.tolist()
         
         # Perform collision (updates velocity)
         perform_ball_wall_collision(self.ball, self.wall, wall_restitution)
-        print(f"  Ball velocity after collision: {self.ball.velocity}")
+        log_entry["ball"]["velocity_after"] = self.ball.velocity.tolist()
         
         # Invalidate all events for the ball (velocity changed)
         events_invalidated = len(self.ball.events)
         self.ball.invalidate_all_events()
-        print(f"  Invalidated {events_invalidated} events for ball {self.ball.index}")
+        log_entry["events_invalidated"] = events_invalidated
         
-        # Generate new events for the ball (ball-ball, ball-wall, ball-grid)
+        # Generate new events for the ball (suppress individual event logging)
         from .event_generation import generate_events_for_ball
         balls = kwargs['balls']
         walls = kwargs['walls']
         grid = kwargs['grid']
         
+        # Suppress individual event generation logging during collision processing
+        import sys, io
+        original_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        
         new_events = generate_events_for_ball(self.ball, balls, walls, grid, self.time, ndim, gravity)
-        print(f"  Generated {len(new_events)} new events for ball {self.ball.index}:")
+        
+        # Restore stdout
+        sys.stdout = original_stdout
+        
+        # Add event generation summary to collision log with detailed event info
+        event_details = []
         for event in new_events:
-            print(f"    {event}")
+            event_info = {"type": event.__class__.__name__, "time": event.time}
+            if hasattr(event, 'ball1') and hasattr(event, 'ball2'):
+                event_info["ball1"] = event.ball1.index
+                event_info["ball2"] = event.ball2.index
+            elif hasattr(event, 'ball'):
+                event_info["ball"] = event.ball.index
+                if hasattr(event, 'wall'):
+                    event_info["wall"] = str(event.wall)
+                elif hasattr(event, 'new_cell'):
+                    event_info["new_cell"] = list(event.new_cell)
+            event_details.append(event_info)
+        
+        log_entry["new_events_generated"] = {
+            "count": len(new_events),
+            "events": event_details
+        }
+        
+        # Print complete collision log with nested event generation
+        print(json.dumps(log_entry))
         
         # Add new events to heap
         for event in new_events:
@@ -231,9 +328,20 @@ class BallGridTransit(Event):
         grid = kwargs['grid']
         event_heap = kwargs['event_heap']
         
-        print(f"PROCESSING BallGridTransit: Ball {self.ball.index} moving from {self.ball.cell} to {self.new_cell} at t={self.time:.6f}")
-        print(f"  Ball position: {self.ball.position}")
-        print(f"  Ball velocity: {self.ball.velocity}")
+        import json
+        
+        log_entry = {
+            "event_type": "BallGridTransit", 
+            "time": self.time,
+            "ball": {
+                "index": self.ball.index,
+                "position": self.ball.position.tolist(),
+                "velocity": self.ball.velocity.tolist(),
+                "old_cell": self.ball.cell,
+                "new_cell": self.new_cell,
+                "time": self.ball.time
+            }
+        }
         
         # Update ball's cell (position/velocity/time unchanged)
         old_cell = self.ball.cell
@@ -241,9 +349,6 @@ class BallGridTransit(Event):
         
         # Update grid cell memberships
         grid.move_ball(self.ball.index, old_cell, self.new_cell)
-        print(f"  Updated grid: ball {self.ball.index} moved from {old_cell} to {self.new_cell}")
-        
-        # Note: No event invalidation needed - velocity unchanged
         
         # Generate new ball-ball events for newly adjacent cells
         from .event_generation import generate_ball_ball_events_for_new_cell, generate_ball_grid_event
@@ -252,16 +357,44 @@ class BallGridTransit(Event):
         gravity = kwargs['gravity']
         current_time = self.time  # Use event time as current time
         
+        # Generate new events (suppress individual event logging)
+        import sys, io
+        original_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        
         new_events = generate_ball_ball_events_for_new_cell(self.ball, old_cell, balls, grid, current_time, ndim, gravity)
-        print(f"  Generated {len(new_events)} new ball-ball events for newly adjacent cells")
         
         # Generate new ball-grid transit event for continued movement in new cell
         grid_events = generate_ball_grid_event(self.ball, current_time, ndim, gravity)
         new_events.extend(grid_events)
-        print(f"  Generated {len(grid_events)} new ball-grid events for continued movement")
         
+        # Restore stdout
+        sys.stdout = original_stdout
+        
+        # Add event generation summary to transit log with detailed event info
+        event_details = []
         for event in new_events:
-            print(f"    {event}")
+            event_info = {"type": event.__class__.__name__, "time": event.time}
+            if hasattr(event, 'ball1') and hasattr(event, 'ball2'):
+                event_info["ball1"] = event.ball1.index
+                event_info["ball2"] = event.ball2.index
+            elif hasattr(event, 'ball'):
+                event_info["ball"] = event.ball.index
+                if hasattr(event, 'wall'):
+                    event_info["wall"] = str(event.wall)
+                elif hasattr(event, 'new_cell'):
+                    event_info["new_cell"] = list(event.new_cell)
+            event_details.append(event_info)
+        
+        log_entry["new_events_generated"] = {
+            "ball_ball_events": len(new_events) - len(grid_events),
+            "grid_events": len(grid_events),
+            "total_count": len(new_events),
+            "events": event_details
+        }
+        
+        # Print JSON log
+        print(json.dumps(log_entry))
         
         # Add new events to heap
         for event in new_events:
@@ -299,14 +432,40 @@ class ExportEvent(Event):
         ndim = kwargs['ndim']
         gravity = kwargs['gravity']
         
-        # Calculate current positions for all balls without updating them
+        # Calculate current positions and velocities for all balls without updating them
         current_positions = []
         current_velocities = []
         
         for ball in balls:
-            pos = ball.get_position_at_time(self.time, ndim, gravity)
+            pos, vel = ball.get_position_and_velocity_at_time(self.time, ndim, gravity)
             current_positions.append(pos)
-            current_velocities.append(ball.velocity.copy())
+            current_velocities.append(vel)
+        
+        # Check for overlapping balls
+        import numpy as np
+        import math
+        for i in range(len(balls)):
+            for j in range(i + 1, len(balls)):
+                ball_i = balls[i]
+                ball_j = balls[j]
+                pos_i = current_positions[i]
+                pos_j = current_positions[j]
+                
+                # Calculate distance between ball centers
+                distance_vec = pos_j - pos_i
+                distance = math.sqrt(np.dot(distance_vec, distance_vec))
+                min_distance = ball_i.radius + ball_j.radius
+                
+                if distance < min_distance:
+                    error_msg = f"OVERLAP DETECTED at t={self.time:.6f}: Ball {ball_i.index} and Ball {ball_j.index}"
+                    error_msg += f"\n  Ball {ball_i.index}: position={pos_i}, radius={ball_i.radius}"
+                    error_msg += f"\n  Ball {ball_j.index}: position={pos_j}, radius={ball_j.radius}"
+                    error_msg += f"\n  Distance={distance:.6f}, Min distance={min_distance:.6f}"
+                    error_msg += f"\n  Overlap amount={min_distance - distance:.6f}"
+                    print(error_msg)
+                    
+                    # Kill the simulation
+                    raise RuntimeError(f"Ball overlap detected: {error_msg}")
         
         # Write to output
         output_manager.write_frame(self.time, current_positions, current_velocities)

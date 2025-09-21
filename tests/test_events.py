@@ -97,17 +97,23 @@ class TestBallBallCollision:
             
             # Mock event generation functions to avoid calling real physics
             with patch('src.event_generation.generate_events_for_ball') as mock_generate:
-                mock_generate.return_value = [Mock(), Mock()]
+                # Create proper mock events with required attributes
+                mock_event = Mock()
+                mock_event.time = 4.0
+                mock_event.__class__.__name__ = "MockEvent"
+                mock_generate.return_value = [mock_event, mock_event]
                 
-                collision.process(
-                    ndim=2,
-                    gravity=False,
-                    ball_restitution=1.0,
-                    balls=[ball1, ball2],
-                    walls=[Mock()],
-                    grid=mock_grid,
-                    event_heap=mock_event_heap
-                )
+                # Mock json.dumps to avoid JSON serialization issues in tests
+                with patch('json.dumps', return_value='{}'):
+                    collision.process(
+                        ndim=2,
+                        gravity=False,
+                        ball_restitution=1.0,
+                        balls=[ball1, ball2],
+                        walls=[Mock()],
+                        grid=mock_grid,
+                        event_heap=mock_event_heap
+                    )
         
         # Check that balls were updated to collision time
         assert ball1.time == 3.0
@@ -169,17 +175,23 @@ class TestBallWallCollision:
             
             # Mock event generation functions to avoid calling real physics
             with patch('src.event_generation.generate_events_for_ball') as mock_generate:
-                mock_generate.return_value = [Mock()]
+                # Create proper mock events with required attributes
+                mock_event = Mock()
+                mock_event.time = 4.0
+                mock_event.__class__.__name__ = "MockEvent"
+                mock_generate.return_value = [mock_event]
                 
-                collision.process(
-                    ndim=2,
-                    gravity=False,
-                    wall_restitution=1.0,
-                    balls=[ball],
-                    walls=[wall],
-                    grid=mock_grid,
-                    event_heap=mock_event_heap
-                )
+                # Mock json.dumps to avoid JSON serialization issues in tests
+                with patch('json.dumps', return_value='{}'):
+                    collision.process(
+                        ndim=2,
+                        gravity=False,
+                        wall_restitution=1.0,
+                        balls=[ball],
+                        walls=[wall],
+                        grid=mock_grid,
+                        event_heap=mock_event_heap
+                    )
         
         # Check that ball was updated to collision time
         assert ball.time == 3.0
@@ -236,16 +248,22 @@ class TestBallGridTransit:
         # Mock event generation functions
         with patch('src.event_generation.generate_ball_ball_events_for_new_cell') as mock_generate, \
              patch('src.event_generation.generate_ball_grid_event') as mock_grid_gen:
-            mock_generate.return_value = [Mock()]
-            mock_grid_gen.return_value = [Mock()]
+            # Create proper mock events with required attributes
+            mock_event = Mock()
+            mock_event.time = 3.0
+            mock_event.__class__.__name__ = "MockEvent"
+            mock_generate.return_value = [mock_event]
+            mock_grid_gen.return_value = [mock_event]
             
-            transit.process(
-                grid=mock_grid,
-                balls=[ball],
-                ndim=2,
-                gravity=False,
-                event_heap=mock_event_heap
-            )
+            # Mock json.dumps to avoid JSON serialization issues in tests
+            with patch('json.dumps', return_value='{}'):
+                transit.process(
+                    grid=mock_grid,
+                    balls=[ball],
+                    ndim=2,
+                    gravity=False,
+                    event_heap=mock_event_heap
+                )
         
         # Check that ball's cell was updated
         assert ball.cell == new_cell
